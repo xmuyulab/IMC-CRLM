@@ -1,6 +1,7 @@
 # Spatial Analysis
 
 ## create scanpy object
+from numpy import isin
 import scanpy as sc
 import os
 import scimap as sm
@@ -13,100 +14,62 @@ from multiprocessing import Pool
 ## load expression matrix and clinical information
 expPath = "/mnt/data/lyx/IMC/analysis/clustering/annotate_allcells.csv"
 clinicalPath = "/mnt/data/lyx/IMC/clinical.csv"
+qcPath = "/mnt/data/lyx/IMC/IMC_CRC_QC.csv"
 
-adata = MergeClinical(expPath, clinicalPath, 35)
+adata = MergeClinical(expPath, clinicalPath, qcPath, 35)
 adata
 
-savePath = "/mnt/data/lyx/IMC/analysis/spatial/"
-if not os.path.exists(savePath):
-    os.mkdir(savePath)
-
-adata.write(os.path.join(savePath, "adata.h5ad"))
-
-## IM ROIs spatial analysis
-adata = sc.read_h5ad(os.path.join(savePath,"adata.h5ad"))
-adata = adata[adata.obs['Tissue'] == "IM",]
+## IM/CT ROIs to scimap spatial analysis
+adata = adata[adata.obs['Tissue'].isin(["IM","CT"]),]
 
 ## scanpy pre-processing
 adata.var_names = adata.var["Marker"]
-sc.pl.highest_expr_genes(adata, n_top=20)
-sc.tl.pca(adata, svd_solver='arpack')  # peform PCA
-
-## Cell population fraction stackplot
-plt.rcParams['figure.dpi']=300
-plt.rcParams['figure.figsize']=(4,3)
-sm.pl.stacked_barplot(adata,
-                      x_axis='RFS_status',
-                      y_axis='MajorType',
-                      method='absolute')
-plt.savefig(os.path.join(savePath,"MajorType_Fraction_stack.pdf"),bbox_inches='tight')
-
-## Cell type fold change in different ROI group
-ROIs = adata.obs["filelist"]
-ROIs = [str(a) for a in Counter(ROIs).keys()]
-
-adata = sm.tl.foldchange(adata,
-                         # from group: different ROI
-                         from_group=['B2_ROI1', 'W12_ROI13','B10_ROI10','W7_ROI9'],
-                         to_group=['B2_ROI1', 'W12_ROI13','B10_ROI10','W7_ROI9'],
-                         imageid='ID',
-                         phenotype='SubType',
-                         normalize=True,
-                         subset_phenotype=None,
-                         label='foldchange')
-
-## Parallel_coordinates plot of the foldchanges
-plt.rcParams['figure.figsize']=(8,6)
-sm.pl.foldchange(adata, label='foldchange',
-                 subset_xaxis=['CD366+ Macrophage', 'cDC',
-                               'Monocyte', 'CD8+ T cell', 'Unkown cell'],
-                 log=True, method='parallel_coordinates', invert_axis=True,
-                 parallel_coordinates_color=[
-                     'black', 'blue', 'green', 'red', '#000000'],
-                 matplotlib_bbox_to_anchor=(1.04, 1),
-                 matplotlib_legend_loc='upper left',
-                 xticks_rotation=90,
-                 return_data=False)
-plt.savefig("/mnt/data/lyx/IMC/clustering/CellFraction_Foldchange.pdf",bbox_inches='tight')
 
 
-# spatial analysis
-
-## XiaoXu analysis pipeline
+## scimap analysis pipeline
 ### 1. spatial count: compute a neighbourhood matrix using radius method or KNN method
 adata = sm.tl.spatial_count(adata, x_coordinate='x', y_coordinate='y',
                             phenotype='SubType', method='radius', radius=30,
                             imageid='ID', subset=None, label='spatial_count_radius_30')
 
-adata = sm.tl.spatial_count(adata, x_coordinate='x', y_coordinate='y',
-                            phenotype='SubType', method='knn',knn=10,
-                            imageid='ID', subset=None, label='spatial_count_knn')
+n_neighborsVec = [10,20,30]
+for n_neighbors in n_neighborsVec:
+    adata = sm.tl.spatial_count(adata, x_coordinate='x', y_coordinate='y',
+                                phenotype='SubType', method='knn',knn=n_neighbors,
+                                imageid='ID', subset=None, label=('spatial_count_knn_'+str(n_neighbors)))
 
 ### 2. spatial expression: compute a neighbourhood weighted matrix based on the expression values.
-adata = sm.tl.spatial_expression(adata, x_coordinate='x', y_coordinate='y',
-                                 method='radius', radius=30, imageid='ID',
-                                 use_raw=False, log=False, subset=None, label='spatial_expression_radius')
+#adata = sm.tl.spatial_expression(adata, x_coordinate='x', y_coordinate='y',
+#                                 method='radius', radius=30, imageid='ID',
+#                                 use_raw=False, log=False, subset=None, label='spatial_expression_radius')
 
-adata = sm.tl.spatial_expression(adata, x_coordinate='x', y_coordinate='y',
-                                 method='knn', knn=10, imageid='ID',
-                                 use_raw=False, subset=None, label='spatial_expression_knn')
+#adata = sm.tl.spatial_expression(adata, x_coordinate='x', y_coordinate='y',
+#                                 method='knn', knn=10, imageid='ID',
+#                                 use_raw=False, subset=None, label='spatial_expression_knn')
 
 ### 3. spatial aggregates: find regions of aggregration of similar cells.
 # Use the purity parameter to fine-tune percent of similar cells within a given radius
-adata = sm.tl.spatial_aggregate(adata, x_coordinate='x', y_coordinate='y',
-                                phenotype='SubType', method='radius', radius=30, purity=95,
-                                imageid='ID', subset=None, label='spatial_aggregate_95')
+#adata = sm.tl.spatial_aggregate(adata, x_coordinate='x', y_coordinate='y',
+#                                phenotype='SubType', method='radius', radius=30, purity=95,
+#                                imageid='ID', subset=None, label='spatial_aggregate_95')
 
-adata = sm.tl.spatial_aggregate(adata, x_coordinate='x', y_coordinate='y',
-                                phenotype='SubType', method='knn', knn=10, purity=60,
-                                imageid='ID', subset=None, label='spatial_aggregate_knn')
+#adata = sm.tl.spatial_aggregate(adata, x_coordinate='x', y_coordinate='y',
+#                                phenotype='SubType', method='knn', knn=10, purity=60,
+#                                imageid='ID', subset=None, label='spatial_aggregate_knn')
 
 ### 4. Clustering the spatial count and expression
-kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata.uns['spatial_count_knn'])
+for n_neighbors in n_neighborsVec:
+    kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata.uns[('spatial_count_knn_'+str(n_neighbors))])
 
-cluster_labels = list(map(str,kmeans.labels_))
-cluster_labels = list(map(lambda orig_string: 'kmeans' + '-' + orig_string, cluster_labels))
-adata.obs['kmeans'] = cluster_labels
+    cluster_labels = list(map(str,kmeans.labels_))
+    cluster_labels = list(map(lambda orig_string: 'kmeans' + '_' + orig_string, cluster_labels))
+    adata.obs[('kmeans_knn_'+str(n_neighbors))] = cluster_labels
+
+#### save the clustering result
+savePath = "/mnt/data/lyx/IMC/analysis/spatial/"
+if not os.path.exists(savePath):
+    os.mkdir(savePath)
+adata.obs.to_csv(savePath+"cellular_neighbor.csv")
 
 ### 5. Motif: spatial_lda
 adata = sm.tl.spatial_lda(adata, x_coordinate='x', y_coordinate='y',

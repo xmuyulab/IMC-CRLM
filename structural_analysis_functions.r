@@ -1,4 +1,6 @@
 # Functions for structural analysis
+library(pheatmap)
+library(ggplot2)
 
 ## clinical information
 load_clinical <- function(sce, clinicalFilePath) {
@@ -56,4 +58,60 @@ MergeAbundanceResult <- function(sce) {
     }
 
     return(AbundanceDF)
+}
+
+## Bind the cellular neighborhoods clustering result with sce
+BindResult <- function(sce, mat, colName) {
+    for (i in colName) {
+        colData(sce)[i] <- mat[, i]
+    }
+    return(sce)
+}
+
+## Heatmap for celltypes in cellular neighborhoods
+GetCelltype2NeighborMat <- function(mat, colname1, colname2) {
+    vec1 <- as.vector(mat[colname1][, 1])
+    vec2 <- as.vector(mat[colname2][, 1])
+
+    VecDF <- cbind(vec1, vec2)
+
+    names1 <- names(table(vec1))
+    names2 <- names(table(vec2))
+
+    plotdf <- matrix(data = NA, nrow = length(names2), ncol = length(names1))
+    rownames(plotdf) <- names2
+    colnames(plotdf) <- names1
+
+    for (i in 1:nrow(plotdf)) {
+        VecDFTemp <- subset(VecDF, vec2 == rownames(plotdf)[i])
+        TableTemp <- as.data.frame(table(VecDFTemp[, "vec1"]))
+        rownames(TableTemp) <- TableTemp[, 1]
+        TableTemp <- TableTemp[match(colnames(plotdf), rownames(TableTemp)), ]
+        TableTemp <- TableTemp[, -1]
+        TableTemp <- ifelse(is.na(TableTemp), 0, TableTemp)
+        plotdf[i, ] <- TableTemp
+    }
+
+    return(as.data.frame(plotdf))
+}
+
+
+HeatmapForCelltypeInNeighbor <- function(sce, colname1, colname2, savePath) {
+    ## transfer into heatmap matrix
+    plotdf <- GetCelltype2NeighborMat(colData(sce), colname1, colname2)
+
+
+    ## heatmap
+    color <- colorRampPalette(c("#436eee", "white", "#EE0000"))(100)
+    p <- pheatmap(plotdf,
+        color = color, scale = "column",
+        cluster_rows = F, cluster_cols = T,
+        legend_labels = c("Abundance high", "Abundance low"), legend = T,
+        show_rownames = T, show_colnames = T
+    )
+
+    pdf(paste0(savePath, "Cellular Neighbors celltype fraction heatmap.pdf"), width = 8, height = 6)
+    print(p)
+    dev.off()
+    return(NULL)
 }

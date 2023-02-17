@@ -104,3 +104,26 @@ ROIs <- names(table(sce$ID))
 for (ROI in ROIs) {
     PlotCelltypes(sce, ROI, selectCelltypes, SavePath = paste0(savePath, ROI, " TME archetypes.pdf"))
 }
+
+
+
+
+
+## Cellular neighbors analysis
+sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
+SavePath <- "/mnt/data/lyx/IMC/analysis/spatial/"
+
+## remain Tissue associated Tumor
+sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
+scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor.csv")
+scimapResult <- scimapResult[, -1]
+
+colnames(scimapResult)
+
+colName <- c("kmeans_knn_10", "kmeans_knn_20", "kmeans_knn_30")
+sce <- BindResult(sce, scimapResult, colName)
+
+colnames(colData(sce))
+
+## Cell subtype fraction in cellular neighbors patter
+HeatmapForCelltypeInNeighbor(sce, "SubType", "kmeans_knn_20", SavePath)
