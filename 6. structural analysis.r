@@ -109,12 +109,13 @@ for (ROI in ROIs) {
 
 
 
-## Cellular neighbors analysis
+# Cellular neighbors analysis
 sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
 SavePath <- "/mnt/data/lyx/IMC/analysis/spatial/"
 
 ## remain Tissue associated Tumor
-sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
+sce <- sce[, sce$Tissue == "IM"]
+# sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
 scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor.csv")
 scimapResult <- scimapResult[, -1]
 
@@ -125,5 +126,14 @@ sce <- BindResult(sce, scimapResult, colName)
 
 colnames(colData(sce))
 
-## Cell subtype fraction in cellular neighbors patter
+## Cell subtype fraction in cellular neighbors pattern
 HeatmapForCelltypeInNeighbor(sce, "SubType", "kmeans_knn_20", SavePath)
+
+## Cellular pattern difference in Relaps and Non-Relaps
+CompareCellularPattern(sce, sep = "RFS_status", countcol = "kmeans_knn_20", n_cluster = 10, savePath = savePath)
+
+## Recluster
+### clutering via metabolize molecular
+rownames(sce)
+metaMarkers <- c("Ki67","VEGF","CAIX","HK2","FASN","CD80","CD274","PRPS1","CD279","GLUT1","CD27")
+ReMajorType <- c("Macrophage","Monocyte")

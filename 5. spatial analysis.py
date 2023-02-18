@@ -1,7 +1,6 @@
 # Spatial Analysis
 
 ## create scanpy object
-from numpy import isin
 import scanpy as sc
 import os
 import scimap as sm
@@ -20,7 +19,8 @@ adata = MergeClinical(expPath, clinicalPath, qcPath, 35)
 adata
 
 ## IM/CT ROIs to scimap spatial analysis
-adata = adata[adata.obs['Tissue'].isin(["IM","CT"]),]
+adata = adata[adata.obs['Tissue'].isin(["IM"]),]
+#adata = adata[adata.obs['Tissue'].isin(["IM","CT"]),]
 
 ## scanpy pre-processing
 adata.var_names = adata.var["Marker"]
