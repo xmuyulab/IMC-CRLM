@@ -121,12 +121,12 @@ HeatmapForCelltypeInNeighbor <- function(sce, colname1, colname2, savePath) {
 }
 
 ## Comapre the Celluar pattern into groups
-CompareCellularPattern <- function(sce, sep = "RFS_status", countcol = "kmeans_knn_20", n_cluster, savePath){
+CompareCellularPattern <- function(sce, sep = "RFS_status", countcol = "kmeans_knn_20", n_cluster, savePath) {
     groups <- names(table(colData(sce)[, sep]))
     cat("The category is: ", groups, "\n")
-    
+
     sce1 <- sce[, colData(sce)[, sep] == groups[1]]
-    sce2 <- sce[, colData(sce)[,sep] == groups[2]]
+    sce2 <- sce[, colData(sce)[, sep] == groups[2]]
 
     ## ROI-level Boxplot
     abundance1 <- GetAbundance(sceobj = sce1, countcol = countcol, is.reuturnMeans = F)
@@ -139,7 +139,7 @@ CompareCellularPattern <- function(sce, sep = "RFS_status", countcol = "kmeans_k
     abundance2 <- GetAbundance(sceobj = sce2, countcol = countcol, is.reuturnMeans = T)
 
     clusters <- colnames(abundance2)[1:n_cluster]
-    for(cluster in clusters){
+    for (cluster in clusters) {
         KMForCellular(abundance1, abundance2, valueCol = c(1:n_cluster), cluster = cluster, savePath)
     }
 
@@ -147,51 +147,54 @@ CompareCellularPattern <- function(sce, sep = "RFS_status", countcol = "kmeans_k
 }
 
 ## get abundace
-GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans = FALSE){
+GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans = FALSE) {
+    cellMeta <- colData(sceobj)
 
-  cellMeta <- colData(sceobj)
+    ## ROI, major celltype and cell subtype names and other clinical information
+    ROIs <- names(table(cellMeta$filelist))
 
-  ## ROI, major celltype and cell subtype names and other clinical information
-  ROIs <- names(table(cellMeta$filelist))
+    SubTypes <- names(table(cellMeta[, countcol]))
+    alltypes <- unique(c(SubTypes))
 
-  SubTypes <- names(table(cellMeta[,countcol]))
-  alltypes <- unique(c(SubTypes))
+    CellCountMat <- matrix(data = NA, nrow = length(ROIs), ncol = (length(alltypes)))
+    CellCountMat <- as.data.frame(CellCountMat)
+    rownames(CellCountMat) <- ROIs
+    colnames(CellCountMat) <- c(alltypes)
 
-  CellCountMat <- matrix(data = NA, nrow = length(ROIs), ncol = (length(alltypes)))
-  CellCountMat <- as.data.frame(CellCountMat)
-  rownames(CellCountMat) <- ROIs
-  colnames(CellCountMat) <- c(alltypes)
+    for (ROI in ROIs) {
+        sceTemp <- sceobj[, sceobj$ID == ROI]
 
-  for (ROI in ROIs) {
-    sceTemp <- sceobj[, sceobj$ID == ROI]
+        coldataTemp <- colData(sceTemp)
+        cellnum <- nrow(coldataTemp)
 
-    coldataTemp <- colData(sceTemp)
-    cellnum <- nrow(coldataTemp)
+        ## count cells
+        SubTem <- as.data.frame(t(table(coldataTemp[, countcol])))
 
-    ## count cells
-    SubTem <- as.data.frame(t(table(coldataTemp[,countcol])))
+        if (is.fraction) {
+            CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq / cellnum
+        }
+        if (!is.fraction) {
+            CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq
+        }
+    }
 
-    if (is.fraction){CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq / cellnum}
-    if(!is.fraction){CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq}
-}
+    ## match the row of clinical and plotdf
+    CellCountMat$PID <- as.vector(sapply(rownames(CellCountMat), function(x) {
+        strsplit(x, "_")[[1]][1]
+    }))
 
-  ## match the row of clinical and plotdf
-  CellCountMat$PID <- as.vector(sapply(rownames(CellCountMat), function(x) {
-    strsplit(x, "_")[[1]][1]
-  }))
+    CellCountMat$Tissue <- cellMeta[match(rownames(CellCountMat), cellMeta$ID), ]$Tissue
+    CellCountMat$RFS_status <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_status
+    CellCountMat$RFS_time <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_time
 
-  CellCountMat$Tissue <- cellMeta[match(rownames(CellCountMat), cellMeta$ID), ]$Tissue
-  CellCountMat$RFS_status <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_status
-  CellCountMat$RFS_time <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_time
-
-  for (i in 1:ncol(CellCountMat)) {
-    CellCountMat[, i][is.na(CellCountMat[, i])] <- 0
-  }
+    for (i in 1:ncol(CellCountMat)) {
+        CellCountMat[, i][is.na(CellCountMat[, i])] <- 0
+    }
 
     if (!is.reuturnMeans) {
         return(CellCountMat)
     }
-    if(is.reuturnMeans){
+    if (is.reuturnMeans) {
         PIDs <- names(table(CellCountMat$PID))
         CellCountMat2 <- matrix(data = 0, nrow = length(PIDs), ncol = ncol(CellCountMat))
         rownames(CellCountMat2) <- PIDs
@@ -210,22 +213,22 @@ GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans =
 }
 
 ## Transform count matrix into ggplot plot matrix
-TransformIntoPlotMat <- function(mat, valueCol){
+TransformIntoPlotMat <- function(mat, valueCol) {
     exp <- mat[, valueCol]
-    meta <- mat[, (max(valueCol)+1):ncol(mat)]
+    meta <- mat[, (max(valueCol) + 1):ncol(mat)]
 
-    plotdf <- matrix(data = 0, nrow = nrow(exp)*ncol(exp), ncol = 5)
-    colnames(plotdf) <- c("Abundance","Pattern","ROI","Relapse","RelapseTime")
+    plotdf <- matrix(data = 0, nrow = nrow(exp) * ncol(exp), ncol = 5)
+    colnames(plotdf) <- c("Abundance", "Pattern", "ROI", "Relapse", "RelapseTime")
     plotdf <- as.data.frame(plotdf)
 
     AbundanceVec <- as.numeric(as.matrix(exp))
     PatternVec <- rep(colnames(exp), each = nrow(exp))
-    ROIVec <- rep(rownames(exp),times = ncol(exp))
-    RelapsVec <- rep(meta$RFS_status,times = ncol(exp))
-    RelapsTimeVec <- rep(meta$RFS_time,times = ncol(exp))
+    ROIVec <- rep(rownames(exp), times = ncol(exp))
+    RelapsVec <- rep(meta$RFS_status, times = ncol(exp))
+    RelapsTimeVec <- rep(meta$RFS_time, times = ncol(exp))
 
-    plotdf$Abundance <- as.numeric(AbundanceVec) 
-    plotdf$Pattern <- as.factor(PatternVec) 
+    plotdf$Abundance <- as.numeric(AbundanceVec)
+    plotdf$Pattern <- as.factor(PatternVec)
     plotdf$ROI <- as.factor(ROIVec)
     plotdf$Relapse <- as.factor(RelapsVec)
     plotdf$RelapseTime <- as.numeric(RelapsTimeVec)
@@ -234,7 +237,7 @@ TransformIntoPlotMat <- function(mat, valueCol){
 }
 
 ## Boxplot For cellular pattern
-BoxPlotForCellular <- function(mat1, mat2, valueCol, savePath){
+BoxPlotForCellular <- function(mat1, mat2, valueCol, savePath) {
     plotdf1 <- TransformIntoPlotMat(mat1, valueCol)
     plotdf2 <- TransformIntoPlotMat(mat2, valueCol)
 
@@ -242,20 +245,20 @@ BoxPlotForCellular <- function(mat1, mat2, valueCol, savePath){
     plotdf$Relapse <- ifelse(plotdf$Relapse == 0, "Non-Relapse", "Relapse")
 
     p <- ggplot(data = plotdf, aes(x = Pattern, y = Abundance, fill = Relapse)) +
-    geom_boxplot(alpha = 0.7) +
-    scale_y_continuous(name = "Abundance") +
-    scale_x_discrete(name = "Cell Neighborhood Pattern") +
-    theme_bw() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      text = element_text(size = 12),
-      axis.title = element_text(face = "bold"),
-      axis.text.x = element_text(size = 11, angle = 90)
-    ) +
-    scale_fill_manual(values = c('#5494cc','#e18283'))+
-    stat_compare_means(aes(group = Relapse), label.y = 0.8, method = "t.test", label = "p.signif")
+        geom_boxplot(alpha = 0.7) +
+        scale_y_continuous(name = "Abundance") +
+        scale_x_discrete(name = "Cell Neighborhood Pattern") +
+        theme_bw() +
+        theme(
+            plot.title = element_text(size = 14, face = "bold"),
+            text = element_text(size = 12),
+            axis.title = element_text(face = "bold"),
+            axis.text.x = element_text(size = 11, angle = 90)
+        ) +
+        scale_fill_manual(values = c("#5494cc", "#e18283")) +
+        stat_compare_means(aes(group = Relapse), label.y = 0.8, method = "t.test", label = "p.signif")
 
-    pdf(paste0(savePath,"Cellular Neighborhood pattern difference.pdf"), height = 6, width = 8)
+    pdf(paste0(savePath, "Cellular Neighborhood pattern difference.pdf"), height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -263,7 +266,7 @@ BoxPlotForCellular <- function(mat1, mat2, valueCol, savePath){
 }
 
 ## KM curve For cellular pattern
-KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath){
+KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath) {
     plotdf1 <- TransformIntoPlotMat(mat1, valueCol)
     plotdf2 <- TransformIntoPlotMat(mat2, valueCol)
 
@@ -284,8 +287,8 @@ KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath){
         palette = c("#3300CC", "#CC3300"),
         xlab = "Recurrence time"
     )
-    
-    pdf(paste0(savePath,"Cellular Neighborhood pattern Suvival analysis of ",cluster,".pdf"), height = 6, width = 8)
+
+    pdf(paste0(savePath, "Cellular Neighborhood pattern Suvival analysis of ", cluster, ".pdf"), height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -293,54 +296,63 @@ KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath){
 }
 
 ## clutering via certain markers
-Reclustering <- function(sce, markers, ReMajorType, marker, savePath){
+Reclustering <- function(sce, markers, ReMajorType, ncluster = 10, savePath) {
     ## extract major types
     sce_ <- sce[, colData(sce)$MajorType %in% ReMajorType]
-    
+
     exp <- assay(sce_)
     exp <- exp[markers, ]
 
     ## K-means clustering
     exp <- t(exp) ## row should be sample
     set.seed(619)
-    fit <- kmeans(exp, centers = 8, nstart = 25)
+    fit <- kmeans(exp, centers = ncluster, nstart = 25)
     table(fit$cluster)
 
     sce_$MyeloidSubtype <- fit$cluster
 
     ## T-sne visualization
     sampleidx <- sample(1:nrow(exp), size = 15000, replace = F) ### sample 15k cells to visualize
-    
-    exp_sample <- exp[sampleidx,] 
-    tsne <- Rtsne(exp_sample,dims=2,PCA=F,verbose=F,max_iter=500,check_duplicates=F)
+
+    exp_sample <- exp[sampleidx, ]
+    tsne <- Rtsne(exp_sample, dims = 2, PCA = F, verbose = F, max_iter = 500, check_duplicates = F)
     tsne_coor <- data.frame(tSNE1 = tsne$Y[, 1], tSNE2 = tsne$Y[, 2])
-    tsne_coor$cluster <- as.factor(fit$cluster[sampleidx]) 
-    tsne_coor$group <- ifelse(sce_$RFS_status[sampleidx]==0,"Non-Relapse","Relapse") 
+    tsne_coor$cluster <- as.factor(fit$cluster[sampleidx])
+    tsne_coor$group <- ifelse(sce_$RFS_status[sampleidx] == 0, "Non-Relapse", "Relapse")
 
     colour <- c(brewer.pal(8, "Set2"), brewer.pal(9, "Set1"), brewer.pal(10, "Set3"))
-    
+
     p <- ggplot(tsne_coor, aes(tSNE1, tSNE2)) +
-        geom_point(aes(color = cluster)) +
+        geom_point(aes(color = cluster), size = 0.5) +
         scale_fill_manual(values = colour) +
         theme_classic() +
-        #stat_ellipse(aes(fill=tsne_coor$cluster), type = "norm", geom ="polygon", alpha=0.2, level=0.95, show.legend = FALSE, linetype = 'dashed', size=3)+
-        facet_grid( ~ group)
+        # stat_ellipse(aes(fill=tsne_coor$cluster), type = "norm", geom ="polygon", alpha=0.2, level=0.95, show.legend = FALSE, linetype = 'dashed', size=3)+
+        facet_grid(~group)
 
-    pdf(paste0(savePath,"tSNE reclustering.pdf"), height = 6, width = 10)
+    pdf(paste0(savePath, "tSNE reclustering.pdf"), height = 6, width = 10)
     print(p)
     dev.off()
 
     ## Plot the marker of each cluster
-    BubbleForcluterMarker(sce_, "MyeloidSubtype", marker, savePath)
+    BubbleForcluterMarker(sce_, "MyeloidSubtype", markers, savePath)
 
-    return(NULL)
+    ## plot all markers expression value
+    if (!dir.exists(paste0(savePath, "marker TSNE/"))) {
+        dir.create(paste0(savePath, "marker TSNE/"))
+    }
+    PlotMarkerOnTSNE(exp_sample, tsne_coor, paste0(savePath, "marker TSNE/"))
+
+    ## The relationship between re-clustering, origin cell subtype and Cellular pattern
+
+
+    return(sce_)
 }
 
 ## Bubble plot for visualize the reclustering markers
-BubbleForcluterMarker <- function(sce_, colname1, markers, savePath){
+BubbleForcluterMarker <- function(sce_, colname1, markers, savePath) {
     exp <- assay(sce_)
     exp <- exp[markers, ]
-    
+
     labels <- names(table(colData(sce_)[, colname1]))
     plotdf <- matrix(data = NA, nrow = length(labels), ncol = length(markers))
     rownames(plotdf) <- labels
@@ -356,17 +368,19 @@ BubbleForcluterMarker <- function(sce_, colname1, markers, savePath){
     }
 
     MarkerIntensity <- as.numeric(plotdf)
-    cluterID <- rep(rownames(plotdf),times=ncol(plotdf))
-    Marker <- rep(colnames(plotdf),each=nrow(plotdf))
+    cluterID <- rep(rownames(plotdf), times = ncol(plotdf))
+    Marker <- rep(colnames(plotdf), each = nrow(plotdf))
 
-    plotdf2 <- data.frame("MarkerIntensity"=MarkerIntensity,"cluterID"=cluterID,"Marker"=Marker)
+    plotdf2 <- data.frame("MarkerIntensity" = MarkerIntensity, "cluterID" = cluterID, "Marker" = Marker)
 
-    p <- ggplot(plotdf2, aes(x = Marker, y = cluterID, size = MarkerIntensity, color=cluterID)) + 
-    geom_point()+
-    theme(panel.background = element_blank(),
+    p <- ggplot(plotdf2, aes(x = Marker, y = cluterID, size = MarkerIntensity, color = cluterID)) +
+        geom_point() +
+        theme(
+            panel.background = element_blank(),
             panel.grid.major = element_line(colour = "white"),
-            panel.border = element_rect(colour="white",fill=NA))
-    pdf(paste0(savePath,"Bubble plot of recluster myeloids.pdf"), height = 6, width = 8)
+            panel.border = element_rect(colour = "white", fill = NA)
+        )
+    pdf(paste0(savePath, "Bubble plot of recluster myeloids.pdf"), height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -374,10 +388,97 @@ BubbleForcluterMarker <- function(sce_, colname1, markers, savePath){
 }
 
 ## 0-1 normlization
-zero2oneNor <- function(vec){
+zero2oneNor <- function(vec) {
     vec <- as.numeric(vec)
     max_ <- max(vec)
     min_ <- min(vec)
 
-    return((vec-min_)/(max_-min_))
+    return((vec - min_) / (max_ - min_))
+}
+
+## Plot the marker expression on T-sne
+PlotMarkerOnTSNE <- function(expDF, tsneDF, savePath) {
+    markers <- colnames(expDF)
+    # plotdf <- as.data.frame(matrix(data = NA, nrow = 0, ncol = (ncol(tsneDF) + 1)))
+
+    for (marker in markers) {
+        plotdfTemp <- cbind(tsneDF, expDF[, marker])
+        colnames(plotdfTemp) <- c("tSNE1", "tSNE2", "cluster", "group", "Intensity")
+        plotdfTemp[, "Intensity"] <- as.numeric(plotdfTemp[, "Intensity"])
+        plotdfTemp$Marker <- rep(marker, times = nrow(plotdfTemp))
+        # plotdf <- rbind(plotdf, plotdfTemp)
+
+
+        # p <- ggplot(plotdf, aes(tSNE1, tSNE2)) +
+        p <- ggplot(plotdfTemp, aes(tSNE1, tSNE2)) +
+            geom_point(aes(color = Intensity), size = 0.5) +
+            scale_colour_gradient(low = "grey", high = "#EE0000") +
+            theme_classic() +
+            facet_grid(Marker ~ group)
+
+        pdf(paste0(savePath, marker, " expression on tSNE reclustering.pdf"), height = 5, width = 8)
+        print(p)
+        dev.off()
+    }
+}
+
+## Plot the contribution of cell subtype and cellular pattern in re-clustering
+SubtypeInReclustering <- function(sce_, reclusteringCol, OrigintypeCol, PatternCol, savePath) {
+    recluster <- colData(sce_)[, reclusteringCol]
+    oritype <- colData(sce_)[, OrigintypeCol]
+    pattern <- colData(sce_)[, PatternCol]
+
+    ## Subtype in re-clustering
+    reclusters <- names(table(recluster))
+    cluster2subtypeDF <- as.data.frame(matrix(data = NA, nrow = 0, ncol = 3))
+    for (clu in reclusters) {
+        idxTemp <- recluster %in% clu
+        oritypeTemp <- as.data.frame(table(oritype[idxTemp]))
+        oritypeTemp <- cbind(Recluster = rep(clu, nrow(oritypeTemp)), oritypeTemp)
+        cluster2subtypeDF <- rbind(cluster2subtypeDF, oritypeTemp)
+    }
+    colnames(cluster2subtypeDF) <- c("Recluster", "CellSubtype", "Counts")
+
+    p <- ggplot(data = cluster2subtypeDF, aes(x = Recluster, y = Counts)) +
+        geom_bar(aes(fill = CellSubtype), stat = "identity", width = 0.9) +
+        theme(
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank(),
+            axis.title = element_text(size = 12, face = "bold"),
+            axis.text.x = element_text(angle = 90, hjust = 1),
+            plot.margin = unit(rep(3, 4), "lines")
+        ) +
+        scale_fill_brewer(palette = "Paired") +
+        coord_flip()
+    pdf(paste0(savePath, "Subtypes in reclustering.pdf"), height = 8, width = 6)
+    print(p)
+    dev.off()
+
+    ## re-clustering in pattern
+    patterns <- names(table(pattern))
+    pattern2reclusterDF <- as.data.frame(matrix(data = NA, nrow = 0, ncol = 3))
+    for (pat in patterns) {
+        idxTemp <- pattern %in% pat
+        reclusterTemp <- as.data.frame(table(recluster[idxTemp]))
+        reclusterTemp <- cbind("Pattern" = rep(pat, nrow(reclusterTemp)), reclusterTemp)
+        pattern2reclusterDF <- rbind(pattern2reclusterDF, reclusterTemp)
+    }
+    colnames(pattern2reclusterDF) <- c("Pattern", "Recluster", "Counts")
+
+    p <- ggplot(data = pattern2reclusterDF, aes(x = Pattern, y = Counts)) +
+        geom_bar(aes(fill = Recluster), stat = "identity", width = 0.9) +
+        theme(
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank(),
+            axis.title = element_text(size = 12, face = "bold"),
+            axis.text.x = element_text(angle = 90, hjust = 1),
+            plot.margin = unit(rep(3, 4), "lines")
+        ) +
+        scale_fill_brewer(palette = "Set1") +
+        coord_flip()
+    pdf(paste0(savePath, "Reclustering in pattern.pdf"), height = 8, width = 6)
+    print(p)
+    dev.off()
 }
