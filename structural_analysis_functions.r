@@ -296,7 +296,7 @@ KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath) {
 }
 
 ## clutering via certain markers
-Reclustering <- function(sce, markers, ReMajorType, ncluster = 10, savePath) {
+Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10, savePath) {
     ## extract major types
     sce_ <- sce[, colData(sce)$MajorType %in% ReMajorType]
 
@@ -309,7 +309,7 @@ Reclustering <- function(sce, markers, ReMajorType, ncluster = 10, savePath) {
     fit <- kmeans(exp, centers = ncluster, nstart = 25)
     table(fit$cluster)
 
-    sce_$MyeloidSubtype <- fit$cluster
+    colData(sce_)[,ReclusterName] <-  fit$cluster
 
     ## T-sne visualization
     sampleidx <- sample(1:nrow(exp), size = 15000, replace = F) ### sample 15k cells to visualize
@@ -325,25 +325,25 @@ Reclustering <- function(sce, markers, ReMajorType, ncluster = 10, savePath) {
     p <- ggplot(tsne_coor, aes(tSNE1, tSNE2)) +
         geom_point(aes(color = cluster), size = 0.5) +
         scale_fill_manual(values = colour) +
+        guides(color=guide_legend(override.aes = list(size=8,alpha=1))) +
         theme_classic() +
-        # stat_ellipse(aes(fill=tsne_coor$cluster), type = "norm", geom ="polygon", alpha=0.2, level=0.95, show.legend = FALSE, linetype = 'dashed', size=3)+
         facet_grid(~group)
 
-    pdf(paste0(savePath, "tSNE reclustering.pdf"), height = 6, width = 10)
+    pdf(paste0(savePath, "tSNE reclustering of ",ReclusterName,".pdf"), height = 6, width = 10)
     print(p)
     dev.off()
 
     ## Plot the marker of each cluster
-    BubbleForcluterMarker(sce_, "MyeloidSubtype", markers, savePath)
+    BubbleForcluterMarker(sce_, ReclusterName, markers, savePath)
 
     ## plot all markers expression value
-    if (!dir.exists(paste0(savePath, "marker TSNE/"))) {
-        dir.create(paste0(savePath, "marker TSNE/"))
+    if (!dir.exists(paste0(savePath, "marker TSNE of ", ReclusterName, "/"))) {
+        dir.create(paste0(savePath, "marker TSNE of ", ReclusterName, "/"))
     }
-    PlotMarkerOnTSNE(exp_sample, tsne_coor, paste0(savePath, "marker TSNE/"))
+    PlotMarkerOnTSNE(exp_sample, tsne_coor, ReclusterName, paste0(savePath, "marker TSNE of ", ReclusterName, "/"))
 
     ## The relationship between re-clustering, origin cell subtype and Cellular pattern
-
+    SubtypeInReclustering(sce_, reclusteringCol = ReclusterName, OrigintypeCol = "SubType", PatternCol = "kmeans_knn_20", savePath)
 
     return(sce_)
 }
@@ -379,8 +379,9 @@ BubbleForcluterMarker <- function(sce_, colname1, markers, savePath) {
             panel.background = element_blank(),
             panel.grid.major = element_line(colour = "white"),
             panel.border = element_rect(colour = "white", fill = NA)
-        )
-    pdf(paste0(savePath, "Bubble plot of recluster myeloids.pdf"), height = 6, width = 8)
+        )+
+        guides(color=guide_legend(override.aes = list(size=8,alpha=1)))
+    pdf(paste0(savePath, "Bubble plot of ", colname1, ".pdf"), height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -397,7 +398,7 @@ zero2oneNor <- function(vec) {
 }
 
 ## Plot the marker expression on T-sne
-PlotMarkerOnTSNE <- function(expDF, tsneDF, savePath) {
+PlotMarkerOnTSNE <- function(expDF, tsneDF, ReclusterName, savePath) {
     markers <- colnames(expDF)
     # plotdf <- as.data.frame(matrix(data = NA, nrow = 0, ncol = (ncol(tsneDF) + 1)))
 
@@ -439,6 +440,7 @@ SubtypeInReclustering <- function(sce_, reclusteringCol, OrigintypeCol, PatternC
     }
     colnames(cluster2subtypeDF) <- c("Recluster", "CellSubtype", "Counts")
 
+    color <- c(brewer.pal(n=8,"Set1"),brewer.pal(n=8,"Set2"),brewer.pal(n=8,"Set3"))
     p <- ggplot(data = cluster2subtypeDF, aes(x = Recluster, y = Counts)) +
         geom_bar(aes(fill = CellSubtype), stat = "identity", width = 0.9) +
         theme(
@@ -449,9 +451,9 @@ SubtypeInReclustering <- function(sce_, reclusteringCol, OrigintypeCol, PatternC
             axis.text.x = element_text(angle = 90, hjust = 1),
             plot.margin = unit(rep(3, 4), "lines")
         ) +
-        scale_fill_brewer(palette = "Paired") +
+        scale_fill_manual("CellSubtype", values = color) +
         coord_flip()
-    pdf(paste0(savePath, "Subtypes in reclustering.pdf"), height = 8, width = 6)
+    pdf(paste0(savePath, "Subtypes in ", reclusteringCol, ".pdf"), height = 8, width = 6)
     print(p)
     dev.off()
 
@@ -476,9 +478,67 @@ SubtypeInReclustering <- function(sce_, reclusteringCol, OrigintypeCol, PatternC
             axis.text.x = element_text(angle = 90, hjust = 1),
             plot.margin = unit(rep(3, 4), "lines")
         ) +
-        scale_fill_brewer(palette = "Set1") +
+        scale_fill_manual("Recluster", values = color) +
         coord_flip()
-    pdf(paste0(savePath, "Reclustering in pattern.pdf"), height = 8, width = 6)
+    pdf(paste0(savePath, reclusteringCol," in ",PatternCol,".pdf"), height = 8, width = 6)
     print(p)
     dev.off()
+
+    return(NULL)
+}
+
+## Plot certain certain reclustering types in cellular pattern
+PlotCertainTypeinPattern <- function(sce_, Col1, types1, Col2, groupCol, savePath) {
+    Vec1 <- as.character(colData(sce_)[, Col1])
+    Vec2 <- as.character(colData(sce_)[, Col2])
+    VecGroup <- as.character(colData(sce_)[, groupCol])
+
+    if (types1 == "all") {
+        idx <- 1:length(Vec1)
+    } else {
+        idx <- Vec1 %in% as.character(types1)
+    }
+
+    Vec2 <- Vec2[idx]
+    VecGroup <- VecGroup[idx]
+
+    ## Count
+    Vec2Names <- names(table(Vec2))
+    VecGroupNames <- names(table(VecGroup))
+
+    plotdf <- matrix(data = NA, nrow = 0, ncol = 3)
+    plotdf <- as.data.frame(plotdf)
+
+    for (name1 in Vec2Names) {
+        for (name2 in VecGroupNames) {
+            idx1 <- Vec2 %in% name1
+            idx2 <- VecGroup %in% name2
+            idx_ <- idx1 & idx2
+            idx_ <- sum(as.numeric(idx_))
+            VecTemp <- c(idx_, name1, name2)
+            plotdf <- rbind(plotdf, VecTemp)
+        }
+    }
+    colnames(plotdf) <- c("Counts", "CellularPattern", "Relapse")
+    plotdf$Counts <- as.numeric(plotdf$Counts)
+
+    ## plot
+    p <- ggplot(data = plotdf, aes(x = CellularPattern, y = Counts)) +
+        geom_bar(aes(fill = Relapse), stat = "identity", width = 0.9, position = "dodge") +
+        theme(
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank(),
+            axis.title = element_text(size = 12, face = "bold"),
+            axis.text.x = element_text(angle = 90, hjust = 1),
+            plot.margin = unit(rep(3, 4), "lines"),
+            legend.position = "bottom", legend.box = "horizontal"
+        ) +
+        scale_fill_brewer(palette = "Paired") +
+        coord_flip()
+    pdf(paste0(savePath, Col1, " ", as.character(types1), " in ", Col2, ".pdf"), height = 8, width = 6)
+    print(p)
+    dev.off()
+
+    return(NULL)
 }

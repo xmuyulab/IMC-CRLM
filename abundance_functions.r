@@ -26,7 +26,7 @@ SCE_Transform <- function(scedf, assay_col = c(1, 35), cellmeta_col = c(36, 49),
 }
 
 ## transfer sce to cell counts matrix
-Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), is.fraction = FALSE) {
+Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatures, is.fraction = FALSE) {
   if (length(group) == 2) {
     sceobj <- sceobj[, sceobj$Tissue == group[1] | sceobj$Tissue == group[2]]
   }
@@ -63,8 +63,17 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), is.fraction = 
     # SubTem$Freq <- round(SubTem$Freq / sum(SubTem$Freq), digits = 4)
 
     # CellCountMat[match(ROI, rownames(CellCountMat)), match(MajorTem$Var2, colnames(CellCountMat))] <- MajorTem$Freq
-    if (is.fraction){CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq / cellnum}
-    if(!is.fraction){CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq}
+    if (is.fraction) {
+      CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq / cellnum
+    }
+    if (!is.fraction) {
+      CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq
+    }
+  }
+
+  ## fill the NA
+  for (i in 1:ncol(CellCountMat)) {
+    CellCountMat[, i][is.na(CellCountMat[, i])] <- 0
   }
 
   ## match the row of clinical and plotdf
@@ -72,53 +81,66 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), is.fraction = 
     strsplit(x, "_")[[1]][1]
   }))
 
-  CellCountMat$Tissue <- cellMeta[match(rownames(CellCountMat), cellMeta$ID), ]$Tissue
-  CellCountMat$RFS_status <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_status
-  CellCountMat$RFS_time <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_time
-
-  for (i in 1:ncol(CellCountMat)) {
-    CellCountMat[, i][is.na(CellCountMat[, i])] <- 0
+  for (feature in clinicalFeatures) {
+    CellCountMat[, feature] <- cellMeta[match(rownames(CellCountMat), cellMeta$ID), feature]
   }
+
   return(CellCountMat)
 }
 
 ## Volcano Plot
-abundanceVolcanoPlot <- function(countdf, pthreshold, fcthreshold) {
+abundanceVolcanoPlot <- function(countdf, pthreshold, fcthreshold, xCol, clinicalFeatures, savePath) {
   ## grouping data
   cat("The tissues is: ", names(table(countdf$Tissue)), "\n")
 
-  mat1 <- subset(countdf, Tissue == "IM")
-  colnames(mat1)
-  mat1_foldchangeMat <- FCandPvalueCal(mat1)
-  VolcanoPlot(mat1_foldchangeMat, pthreshold = pthreshold, fcthreshold = fcthreshold, filename = "IM_CellFraction_Volcano.pdf")
+  ## savePath
+  savePath <- paste0(savePath, "VolcanoPlots/")
+  if (!dir.exists(savePath)) {
+    dir.create(savePath)
+  }
 
+  for (feature in clinicalFeatures) {
+    cat("Process feature: ", feature, "\n")
+    mat1 <- subset(countdf, Tissue == "IM")
+    colnames(mat1)
+    mat1_foldchangeMat <- FCandPvalueCal(mat1, xCol = xCol, yCol = feature)
+    if (length(mat1_foldchangeMat) != 1) {
+      VolcanoPlot(mat1_foldchangeMat, pthreshold = pthreshold, fcthreshold = fcthreshold, feature, filename = paste0(savePath, "IM_CellFraction_Volcano of ", feature, ".pdf"))
+    }
 
-  mat2 <- subset(countdf, Tissue == "CT")
-  colnames(mat2)
-  mat2_foldchangeMat <- FCandPvalueCal(mat2)
-  VolcanoPlot(mat2_foldchangeMat, pthreshold = pthreshold, fcthreshold = fcthreshold, filename = "CT_CellFraction_Volcano.pdf")
+    mat2 <- subset(countdf, Tissue == "CT")
+    colnames(mat2)
+    mat2_foldchangeMat <- FCandPvalueCal(mat2, xCol = xCol, yCol = feature)
+    if (length(mat2_foldchangeMat) != 1) {
+      VolcanoPlot(mat2_foldchangeMat, pthreshold = pthreshold, fcthreshold = fcthreshold, feature, filename = paste0(savePath, "CT_CellFraction_Volcano of ", feature, ".pdf"))
+    }
 
-  mat3 <- subset(countdf, Tissue == "TAT")
-  colnames(mat3)
-  mat3_foldchangeMat <- FCandPvalueCal(mat3)
-  VolcanoPlot(mat3_foldchangeMat, pthreshold = pthreshold, fcthreshold = fcthreshold, filename = "TAT_CellFraction_Volcano.pdf")
+    mat3 <- subset(countdf, Tissue == "TAT")
+    colnames(mat3)
+    mat3_foldchangeMat <- FCandPvalueCal(mat3, xCol = xCol, yCol = feature)
+    if (length(mat3_foldchangeMat) != 1) {
+      VolcanoPlot(mat3_foldchangeMat, pthreshold = pthreshold, fcthreshold = fcthreshold, feature, filename = paste0(savePath, "TAT_CellFraction_Volcano of ", feature, ".pdf"))
+    }
+  }
 
   return(NULL)
 }
 
 ## calculate fold-change and p-value
-FCandPvalueCal <- function(mat, x = c(1, 21)) {
-  y <- ncol(mat) - 1
-  groups <- names(table(mat[, y]))
+FCandPvalueCal <- function(mat, xCol, yCol) {
+  groups <- names(table(mat[, yCol]))
+  if (length(groups) < 2) {
+    return(0)
+  }
 
-  returnMat <- matrix(data = NA, nrow = length(x[1]:x[2]), ncol = 3)
+  returnMat <- matrix(data = NA, nrow = length(xCol[1]:xCol[2]), ncol = 3)
   returnMat <- as.data.frame(returnMat)
   colnames(returnMat) <- c("Celltype", "Foldchange", "P.value")
 
   group1mat <- subset(mat, RFS_status == groups[1])
   group2mat <- subset(mat, RFS_status == groups[2])
 
-  for (i in x[1]:x[2]) {
+  for (i in xCol[1]:xCol[2]) {
     typeTemp <- colnames(mat)[i]
 
     v1 <- group1mat[, i]
@@ -135,7 +157,7 @@ FCandPvalueCal <- function(mat, x = c(1, 21)) {
 }
 
 ## Plot volcano plot
-VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, filename = NULL) {
+VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filename = NULL) {
   df$Foldchange <- as.numeric(df$Foldchange)
   df$P.value <- as.numeric(df$P.value)
 
@@ -163,7 +185,7 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, filename = NUL
     geom_vline(xintercept = c(-(log2(fcthreshold)), (log2(fcthreshold))), lty = 4, col = "black", lwd = 0.8) +
     geom_hline(yintercept = -log10(pthreshold), lty = 4, col = "black", lwd = 0.8) +
     theme_bw() +
-    labs(x = "log2(Fold Change)", y = "-log10(P value)", title = "Volcano Plot of  Different Expression Proteins") +
+    labs(x = "log2(Fold Change)", y = "-log10(P value)", title = paste0("Volcano Plot of Different Expression Celltypes in ", feature)) +
     # 坐标轴标题、标签和图例相关设置
     theme(
       axis.text = element_text(size = 11), axis.title = element_text(size = 13), # 坐标轴标签和标题
@@ -194,7 +216,7 @@ abundanceBoxplot <- function(plotdf, celltypes2Plot, expCol = c(1, 27)) {
       axis.title = element_text(face = "bold"),
       axis.text.x = element_text(size = 11, angle = 90)
     ) +
-    facet_wrap(~Celltype,ncol = 3) +
+    facet_wrap(~Celltype, ncol = 3) +
     scale_fill_lancet() +
     stat_compare_means(aes(group = Recurrence), label.y = 0.5, method = "t.test")
 
@@ -380,7 +402,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features) {
       ins("Cell Population Abundance"),
       result[c(1:numcelltype), ],
       ins("Other Clnical Information"),
-      result[c((numcelltype+1):nrow(result)), ],
+      result[c((numcelltype + 1):nrow(result)), ],
       c(NA, NA, NA, NA, NA, NA)
     )
   }
@@ -492,11 +514,11 @@ CorrelationAnalysis <- function(df, savePath) {
 }
 
 ## merge the conunts of ROIs from same patients
-MergeCountsofROI <- function(countdf,tissue, expCol, scale = F){
+MergeCountsofROI <- function(countdf, tissue, expCol, scale = F) {
   countdf <- subset(countdf, Tissue == tissue)
   pids <- names(table(countdf$PID))
 
-  PIDDF <- matrix(data = NA, nrow = length(pids), ncol = (expCol[2]-expCol[1]+1))
+  PIDDF <- matrix(data = NA, nrow = length(pids), ncol = (expCol[2] - expCol[1] + 1))
   rownames(PIDDF) <- pids
   colnames(PIDDF) <- colnames(countdf)[expCol[1]:expCol[2]]
 
@@ -506,11 +528,10 @@ MergeCountsofROI <- function(countdf,tissue, expCol, scale = F){
     expTemp <- apply(expTemp, MARGIN = 2, FUN = "mean")
     PIDDF[pid, ] <- expTemp
   }
-  if(scale){
-    PIDDF <- scale(PIDDF,center=F,scale = T)  
+  if (scale) {
+    PIDDF <- scale(PIDDF, center = F, scale = T)
   }
   PIDDF <- as.data.frame(PIDDF)
 
   return(PIDDF)
-  
 }

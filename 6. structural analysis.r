@@ -137,7 +137,11 @@ CompareCellularPattern(sce, sep = "RFS_status", countcol = "kmeans_knn_20", n_cl
 rownames(sce)
 metaMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27")
 ReMajorType <- c("Macrophage", "Monocyte")
+ReclusterName <- "MyeloidSubtype"
 
-sce_ <- Reclustering(sce, metaMarkers, ReMajorType, savePath)
+sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath)
 
-### plot Markers on Tsne
+# sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
+
+## Certain reclustering types in cellular pattern
+PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = 1, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
