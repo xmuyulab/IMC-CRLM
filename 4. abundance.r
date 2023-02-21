@@ -111,13 +111,13 @@ countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFea
 countdf$Recurrence_site <- ifelse(countdf$Recurrence_site == "Liver", 0, 1) ## Recurrence in Liver: 0, Extrahepatic: 1
 countdf$fong_score <- ifelse(as.numeric(countdf$fong_score) <= 2, 0, 1) ## International Liver-recurrence score, 0: low-risk, 1: high-risk
 countdf$Age <- ifelse(as.numeric(countdf$Age) >= 60, 1, 0) ## Age: >=60: 1, otherwise: 0
-## Gender, 1: Male, 2: Female
+countdf$Gender <- ifelse(as.numeric(countdf$Gender) == 1, 0, 1) ## Gender, 0: Male, 1: Female
 ## KRAS mutation: 1: Mut, 0: WT
 ## BRAF mutation: 1: Mut, 0: WT
 countdf$mTBS <- ifelse(as.numeric(countdf$mTBS) >= median(as.numeric(countdf$mTBS)), 1, 0) ## Tumor Burden Score, 1: high, 0: low
 countdf$CRLM_number <- ifelse(as.numeric(countdf$CRLM_number) >= median(as.numeric(countdf$CRLM_number)), 1, 0) ## CRC-Liver metastasis number, 1: high, 0: low
 countdf$CRLM_size <- ifelse(as.numeric(countdf$CRLM_size) >= median(as.numeric(countdf$CRLM_size)), 1, 0) ## CRC-Liver metastasis Size, 1: high, 0: low
-## Live involvement number
+countdf$countdf$Live_involvement_num <- ifelse(as.numeric(countdf$countdf$Live_involvement_num) == 1, 0, 1) ## Live involvement number, 0: 1, 1: 2
 countdf$CEA <- ifelse(as.numeric(countdf$CEA) >= 5, 1, 0) ## Pre-operation value, 1: abnormal, 0: normal
 countdf$CA199 <- ifelse(as.numeric(countdf$CA199) >= 37, 1, 0) ## Pre-operation value, 1: abnormal, 0: normal
 ## Pathology: 0: Adenocarcinoma, 1: Mucinous adenocarcinoma
@@ -128,7 +128,12 @@ countdf$CA199 <- ifelse(as.numeric(countdf$CA199) >= 37, 1, 0) ## Pre-operation 
 xCol <- c(1,24)
 clinicalFeatures <- c(
     "Prognosis", "RFS_status", "Recurrence_site", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
-    "CRLM_number", "CRLM_size", "Live_involvement_num", "CEA", "CA199", "Pathology", "T_grade", "Lymph_grade"
+    "CRLM_number", "CRLM_size", "Live_involvement_num", "CEA", "CA199", "Pathology", "Lymph_grade"
 )
 
-abundanceVolcanoPlot(countdf, pthreshold = 0.05, fcthreshold = 1.2, xCol = xCol, clinicalFeatures = clinicalFeatures, savePath = savePath)
+for(tissue in c("IM","CT","TAT")){
+    CountMAT <- abundanceDotPlotMat(countdf, xCol = xCol, clinicalFeatures = clinicalFeatures, tissue = tissue)
+    MultiCliDotplot(CountMAT, tissue = tissue, savePath)
+}
+
+

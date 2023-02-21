@@ -126,9 +126,90 @@ abundanceVolcanoPlot <- function(countdf, pthreshold, fcthreshold, xCol, clinica
   return(NULL)
 }
 
+abundanceDotPlotMat <- function(countdf, xCol, clinicalFeatures, tissue) {
+  ## grouping data
+  cat("Abundance analysis for multiple clinical features.", "\n")
+
+  returnDF <- as.data.frame(matrix(data = NA, nrow = 0, ncol = 5))
+
+  for (feature in clinicalFeatures) {
+    cat("Process feature: ", feature, "\n")
+    mat1 <- subset(countdf, Tissue == tissue)
+    mat1_foldchangeMat <- FCandPvalueCal(mat1, xCol = xCol, yCol = feature)
+    if (class(mat1_foldchangeMat) == "numeric") {
+      cat("The feature ", feature, " do not contain two groups!", "\n")
+      next
+    }
+    mat1_foldchangeMat$Feature <- rep(feature, times = nrow(mat1_foldchangeMat))
+    mat1_foldchangeMat$Tissue <- rep(tissue, times = nrow(mat1_foldchangeMat))
+    returnDF <- rbind(returnDF, mat1_foldchangeMat)
+  }
+  colnames(returnDF) <- c("Celltype", "Foldchange", "P.value", "Feature", "Tissue")
+  returnDF <- summaryClinical(returnDF) 
+
+  return(returnDF)
+}
+
+summaryClinical <- function(DF) {
+  DF$FeatureGroup <- NA
+  features <- names(table(DF$Feature))
+  for (feature in features) {
+    if (feature == "Prognosis") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Worse Prog versus Better"
+    }
+    if (feature == "RFS_status") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Relapse versus Non-relapse"
+    }
+    if (feature == "Recurrence_site") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Extrahepatic relapse versus Liver"
+    }
+    if (feature == "fong_score") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-FongScore versus Low-FongScore"
+    }
+    if (feature == "Age") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- ">=60 versus <60"
+    }
+    if (feature == "Gender") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Female versus Male"
+    }
+    if (feature == "KRAS_mutation") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "KRAS Mut versus WT"
+    }
+    if (feature == "BRAF_mutation") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "BRAF Mut versus WT"
+    }
+    if (feature == "mTBS") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-mTBS versus Low-mTBS"
+    }
+    if (feature == "CRLM_number") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-CRLMNUM versus Low-CRLMNUM"
+    }
+    if (feature == "CRLM_size") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-CRLMSize versus Low-CRLMSize"
+    }
+    if (feature == "Live_involvement_num") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Liver involvement 2 versus involvement 1"
+    }
+    if (feature == "CEA") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Abnormal CEA versus Normal"
+    }
+    if (feature == "CA199") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Abnormal CA199 versus Normal"
+    }
+    if (feature == "Pathology") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Mucinous versus Adenocarcinoma"
+    }
+    if (feature == "Lymph_grade") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "N-positive versus N-negative"
+    }
+  }
+  return(DF)
+}
+
 ## calculate fold-change and p-value
 FCandPvalueCal <- function(mat, xCol, yCol) {
   groups <- names(table(mat[, yCol]))
+  groups <- as.character(sort(as.numeric(groups), decreasing = F))
   if (length(groups) < 2) {
     return(0)
   }
@@ -137,8 +218,8 @@ FCandPvalueCal <- function(mat, xCol, yCol) {
   returnMat <- as.data.frame(returnMat)
   colnames(returnMat) <- c("Celltype", "Foldchange", "P.value")
 
-  group1mat <- subset(mat, RFS_status == groups[1])
-  group2mat <- subset(mat, RFS_status == groups[2])
+  group1mat <- mat[which(mat[, yCol] == groups[1]), ]
+  group2mat <- mat[which(mat[, yCol] == groups[2]), ]
 
   for (i in xCol[1]:xCol[2]) {
     typeTemp <- colnames(mat)[i]
@@ -196,6 +277,31 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
 
   ggsave(p.vol, filename = filename)
 
+  return(NULL)
+}
+
+## Multiple clinical features Dotplot
+MultiCliDotplot <- function(plotdf, tissue, savePath){
+  plotdf$P.label <- ifelse(plotdf$P.value <= 0.001, "***", ifelse(plotdf$P.value <= 0.01, "**", ifelse(plotdf$P.value <= 0.05, "*", "n.s.")))
+  plotdf$lgPvalue <- ifelse(plotdf$P.value <= 0.001,4,ifelse(plotdf$P.value <= 0.01, 3, ifelse(plotdf$P.value <= 0.05, 2, 1)))
+  plotdf$log2Foldchange <- log2(as.numeric(plotdf$Foldchange))
+
+  plotdf$log2Foldchange <- ifelse(plotdf$log2Foldchange > 1.5, 1.5, plotdf$log2Foldchange)
+  plotdf$log2Foldchange <- ifelse(plotdf$log2Foldchange < (-1.5), (-1.5), plotdf$log2Foldchange)
+
+  p <- ggplot(plotdf, aes(x = Celltype, y = FeatureGroup, size = lgPvalue, colour = log2Foldchange)) +
+    geom_point() +
+    theme(
+      panel.background = element_blank(),
+      panel.grid.major = element_line(colour = "white"),
+      panel.border = element_rect(colour = "white", fill = NA),
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    ) + 
+    scale_color_gradient2(low = "royalblue",mid = "white", high = "firebrick3")
+
+    pdf(paste0(savePath,"Multiple clinical features abundance differnt of ",tissue,".pdf"), height = 6, width = 10)
+    print(p)
+    dev.off()
   return(NULL)
 }
 

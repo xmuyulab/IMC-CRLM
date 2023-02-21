@@ -306,10 +306,10 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
     ## K-means clustering
     exp <- t(exp) ## row should be sample
     set.seed(619)
-    fit <- kmeans(exp, centers = ncluster, nstart = 25)
+    fit <- kmeans(exp, centers = ncluster, nstart = 25, iter.max = 50)
     table(fit$cluster)
 
-    colData(sce_)[,ReclusterName] <-  fit$cluster
+    colData(sce_)[, ReclusterName] <- fit$cluster
 
     ## T-sne visualization
     sampleidx <- sample(1:nrow(exp), size = 15000, replace = F) ### sample 15k cells to visualize
@@ -325,11 +325,11 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
     p <- ggplot(tsne_coor, aes(tSNE1, tSNE2)) +
         geom_point(aes(color = cluster), size = 0.5) +
         scale_fill_manual(values = colour) +
-        guides(color=guide_legend(override.aes = list(size=8,alpha=1))) +
+        guides(color = guide_legend(override.aes = list(size = 8, alpha = 1))) +
         theme_classic() +
         facet_grid(~group)
 
-    pdf(paste0(savePath, "tSNE reclustering of ",ReclusterName,".pdf"), height = 6, width = 10)
+    pdf(paste0(savePath, "tSNE reclustering of ", ReclusterName, ".pdf"), height = 6, width = 10)
     print(p)
     dev.off()
 
@@ -379,8 +379,8 @@ BubbleForcluterMarker <- function(sce_, colname1, markers, savePath) {
             panel.background = element_blank(),
             panel.grid.major = element_line(colour = "white"),
             panel.border = element_rect(colour = "white", fill = NA)
-        )+
-        guides(color=guide_legend(override.aes = list(size=8,alpha=1)))
+        ) +
+        guides(color = guide_legend(override.aes = list(size = 8, alpha = 1)))
     pdf(paste0(savePath, "Bubble plot of ", colname1, ".pdf"), height = 6, width = 8)
     print(p)
     dev.off()
@@ -440,7 +440,7 @@ SubtypeInReclustering <- function(sce_, reclusteringCol, OrigintypeCol, PatternC
     }
     colnames(cluster2subtypeDF) <- c("Recluster", "CellSubtype", "Counts")
 
-    color <- c(brewer.pal(n=8,"Set1"),brewer.pal(n=8,"Set2"),brewer.pal(n=8,"Set3"))
+    color <- c(brewer.pal(n = 8, "Set1"), brewer.pal(n = 8, "Set2"), brewer.pal(n = 8, "Set3"))
     p <- ggplot(data = cluster2subtypeDF, aes(x = Recluster, y = Counts)) +
         geom_bar(aes(fill = CellSubtype), stat = "identity", width = 0.9) +
         theme(
@@ -480,7 +480,7 @@ SubtypeInReclustering <- function(sce_, reclusteringCol, OrigintypeCol, PatternC
         ) +
         scale_fill_manual("Recluster", values = color) +
         coord_flip()
-    pdf(paste0(savePath, reclusteringCol," in ",PatternCol,".pdf"), height = 8, width = 6)
+    pdf(paste0(savePath, reclusteringCol, " in ", PatternCol, ".pdf"), height = 8, width = 6)
     print(p)
     dev.off()
 
@@ -493,11 +493,8 @@ PlotCertainTypeinPattern <- function(sce_, Col1, types1, Col2, groupCol, savePat
     Vec2 <- as.character(colData(sce_)[, Col2])
     VecGroup <- as.character(colData(sce_)[, groupCol])
 
-    if (types1 == "all") {
-        idx <- 1:length(Vec1)
-    } else {
-        idx <- Vec1 %in% as.character(types1)
-    }
+    idx <- Vec1 %in% as.character(types1)
+
 
     Vec2 <- Vec2[idx]
     VecGroup <- VecGroup[idx]

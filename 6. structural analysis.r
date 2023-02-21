@@ -116,7 +116,7 @@ savePath <- "/mnt/data/lyx/IMC/analysis/spatial/"
 ## remain Tissue associated Tumor
 sce <- sce[, sce$Tissue == "IM"]
 # sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
-scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor.csv")
+scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor_IM.csv")
 scimapResult <- scimapResult[, -1]
 
 colnames(scimapResult)
@@ -136,12 +136,12 @@ CompareCellularPattern(sce, sep = "RFS_status", countcol = "kmeans_knn_20", n_cl
 ### clutering via metabolize molecular
 rownames(sce)
 metaMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27")
-ReMajorType <- c("Macrophage", "Monocyte")
-ReclusterName <- "MyeloidSubtype"
+ReMajorType <- c("Macrophage")
+ReclusterName <- "Macrophage"
 
-sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath)
+sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 6, savePath)
 
 # sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
 
 ## Certain reclustering types in cellular pattern
-PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = 1, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
+PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = c("2", "3"), Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
