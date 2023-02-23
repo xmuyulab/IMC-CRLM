@@ -6,6 +6,7 @@ library(survival)
 library(survminer)
 library(Rtsne)
 library(RColorBrewer)
+library(ggrepel)
 
 ## clinical information
 load_clinical <- function(sce, clinicalFilePath) {
@@ -322,11 +323,16 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
 
     colour <- c(brewer.pal(8, "Set2"), brewer.pal(9, "Set1"), brewer.pal(10, "Set3"))
 
+    centers <- tsne_coor[, c("tSNE1", "tSNE2", "cluster")] %>%
+        dplyr::group_by(cluster) %>%
+        dplyr::summarise(x = median(x = tSNE1), y = median(x = tSNE2))
+
     p <- ggplot(tsne_coor, aes(tSNE1, tSNE2)) +
         geom_point(aes(color = cluster), size = 0.5) +
         scale_fill_manual(values = colour) +
         guides(color = guide_legend(override.aes = list(size = 8, alpha = 1))) +
         theme_classic() +
+        geom_text(data = centers, aes(x, y, label = cluster)) +
         facet_grid(~group)
 
     pdf(paste0(savePath, "tSNE reclustering of ", ReclusterName, ".pdf"), height = 6, width = 10)
@@ -536,6 +542,109 @@ PlotCertainTypeinPattern <- function(sce_, Col1, types1, Col2, groupCol, savePat
     pdf(paste0(savePath, Col1, " ", as.character(types1), " in ", Col2, ".pdf"), height = 8, width = 6)
     print(p)
     dev.off()
+
+    return(NULL)
+}
+
+## Phenotype-associated cell label barplot
+BoxPlotForPhenoAssCell <- function(plotdf, savePath) {
+    plotdf$Relapse <- ifelse(plotdf$Relapse == 0, "Non-Relapse", "Relapse")
+
+    p <- ggplot(data = plotdf, aes(x = Pattern, y = Abundance, fill = Relapse)) +
+        geom_boxplot(alpha = 0.7) +
+        scale_y_continuous(name = "Abundance") +
+        scale_x_discrete(name = "Cell Neighborhood Pattern") +
+        theme_bw() +
+        theme(
+            plot.title = element_text(size = 14, face = "bold"),
+            text = element_text(size = 12),
+            axis.title = element_text(face = "bold"),
+            axis.text.x = element_text(size = 11, angle = 90)
+        ) +
+        scale_fill_manual(values = c("#5494cc", "#e18283")) +
+        stat_compare_means(aes(group = Relapse), label.y = max(plotdf$Abundance), method = "t.test", label = "p.signif")
+
+    pdf(paste0(savePath, "Boxplot of Pheno-associated celllabel.pdf"), height = 6, width = 8)
+    print(p)
+    dev.off()
+
+    return(NULL)
+}
+
+## calcualte FC
+FCandPvalueCal <- function(mat, xCol, yCol, need.sample = FALSE) {
+    if (need.sample) {
+        idx <- sample(1:nrow(mat), size = 2000, replace = FALSE)
+        mat <- mat[idx, ]
+    }
+    groups <- names(table(mat[, yCol]))
+    groups <- as.character(sort(as.numeric(groups), decreasing = F))
+    if (length(groups) < 2) {
+        return(0)
+    }
+
+    returnMat <- matrix(data = NA, nrow = length(xCol[1]:xCol[2]), ncol = 3)
+    returnMat <- as.data.frame(returnMat)
+    colnames(returnMat) <- c("Celltype", "Foldchange", "P.value")
+
+    group1mat <- mat[which(mat[, yCol] == groups[1]), ]
+    group2mat <- mat[which(mat[, yCol] == groups[2]), ]
+
+    for (i in xCol[1]:xCol[2]) {
+        typeTemp <- colnames(mat)[i]
+
+        v1 <- group1mat[, i]
+        v2 <- group2mat[, i]
+
+        ## relaps versus no relaps
+        foldchange <- mean(v2) / mean(v1)
+        pvalue <- t.test(v2, v1)$p.value
+
+        returnMat[i, ] <- c(typeTemp, foldchange, pvalue)
+    }
+
+    return(returnMat)
+}
+
+## Plot volcano plot
+VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filename = NULL) {
+    df$Foldchange <- as.numeric(df$Foldchange)
+    df$P.value <- as.numeric(df$P.value)
+
+    df$change <- as.factor(ifelse(df$P.value < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold),
+        ifelse(log2(df$Foldchange) > log2(fcthreshold), "Up-regulate", "Down-regulate"), "Non-significant"
+    ))
+
+    # 样本标签
+    df$label <- ifelse(df[, 3] < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold), as.character(df[, 1]), "")
+
+    # 绘制火山图
+    p.vol <- ggplot(
+        data = df,
+        aes(x = log2(Foldchange), y = -log10(P.value), colour = change, fill = change)
+    ) +
+        scale_color_manual(values = c("Down-regulate" = "blue", "Non-significant" = "grey", "Up-regulate" = "red")) +
+        geom_point(alpha = 0.4, size = 3.5) +
+        # 标签
+        geom_text_repel(aes(x = log2(Foldchange), y = -log10(P.value), label = label),
+            size = 3,
+            box.padding = unit(0.6, "lines"), point.padding = unit(0.7, "lines"),
+            segment.color = "black", show.legend = FALSE
+        ) +
+        # 辅助线
+        geom_vline(xintercept = c(-(log2(fcthreshold)), (log2(fcthreshold))), lty = 4, col = "black", lwd = 0.8) +
+        geom_hline(yintercept = -log10(pthreshold), lty = 4, col = "black", lwd = 0.8) +
+        theme_bw() +
+        labs(x = "log2(Fold Change)", y = "-log10(P value)", title = paste0("Volcano Plot of Different Expression Markers in ", feature)) +
+        # 坐标轴标题、标签和图例相关设置
+        theme(
+            axis.text = element_text(size = 11), axis.title = element_text(size = 13), # 坐标轴标签和标题
+            plot.title = element_text(hjust = 0.5, size = 15, face = "bold"), # 标题
+            legend.text = element_text(size = 11), legend.title = element_text(size = 13), # 图例标签和标题
+            plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")
+        ) # 图边距
+
+    ggsave(p.vol, filename = filename)
 
     return(NULL)
 }

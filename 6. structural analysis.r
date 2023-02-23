@@ -136,12 +136,30 @@ CompareCellularPattern(sce, sep = "RFS_status", countcol = "kmeans_knn_20", n_cl
 ### clutering via metabolize molecular
 rownames(sce)
 metaMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27")
-ReMajorType <- c("Macrophage")
-ReclusterName <- "Macrophage"
+ReMajorType <- c("Monocyte")
+ReclusterName <- "Monocyte"
 
-sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 6, savePath)
+sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 10, savePath)
 
 # sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
 
 ## Certain reclustering types in cellular pattern
-PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = c("2", "3"), Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
+interstType <- c("8", "10")
+PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = interstType, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
+
+## assign the new label
+sce_$phenoLabel <- "Pheno_minus"
+sce_$phenoLabel[which(colData(sce_)[, ReclusterName] %in% interstType)] <- "Pheno_plus"
+table(colData(sce_)$phenoLabel)
+
+phenoLabelCountMat <- GetAbundance(sce_, countcol = "phenoLabel", is.fraction = FALSE, is.reuturnMeans = FALSE)
+phenoLabelCountMat <- TransformIntoPlotMat(phenoLabelCountMat, valueCol = c(1:2))
+head(phenoLabelCountMat)
+BoxPlotForPhenoAssCell(phenoLabelCountMat, savePath)
+
+## plot the differential expression genes
+sce_ <- sce_[, sce_$MajorType == ReMajorType]
+mat <- as.data.frame(t(assay(sce_)[metaMarkers, ]))
+mat$phenoLabel <- ifelse(sce_$phenoLabel == "Pheno_minus", 0, 1)
+FCDF <- FCandPvalueCal(mat, xCol = c(1, 11), yCol = 12, need.sample = TRUE)
+VolcanoPlot(FCDF, pthreshold = 0.01, fcthreshold = 3, feature = "Phenotype-Associated cells", filename = paste0(savePath, "Phenotype-associated differential markers in ", ReMajorType, ".pdf"))
