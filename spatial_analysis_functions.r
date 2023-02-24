@@ -647,6 +647,6 @@ VisTypeMaskChannel <- function(sce, ROI, celltypes, channel, maskPath, channelPa
 
     png::writePNG(MaskMat, paste0(SavePath, "CellMask.png"), dpi = 100)
     png::writePNG(ChannelArray, paste0(SavePath, channel[1], "-", channel[2], "_channel.png"), dpi = 100)
-    cat(ROI, ": CellMask, celltypes and channel image were done!")
+    cat(ROI, ": CellMask, celltypes and channel image were done!",'\n')
     return(NULL)
 }

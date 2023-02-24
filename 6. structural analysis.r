@@ -125,6 +125,7 @@ colName <- c("kmeans_knn_10", "kmeans_knn_20", "kmeans_knn_30")
 sce <- BindResult(sce, scimapResult, colName)
 
 colnames(colData(sce))
+table(colData(sce)$MajorType)
 
 ## Cell subtype fraction in cellular neighbors pattern
 HeatmapForCelltypeInNeighbor(sce, "SubType", "kmeans_knn_20", savePath)

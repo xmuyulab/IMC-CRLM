@@ -307,7 +307,7 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
     ## K-means clustering
     exp <- t(exp) ## row should be sample
     set.seed(619)
-    fit <- kmeans(exp, centers = ncluster, nstart = 25, iter.max = 50)
+    fit <- kmeans(exp, centers = ncluster, nstart = 25, iter.max = 100)
     table(fit$cluster)
 
     colData(sce_)[, ReclusterName] <- fit$cluster
