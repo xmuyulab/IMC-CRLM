@@ -22,31 +22,36 @@ load_RawData <- function(raw_csv_dir, meta_csv_dir, Area_cutoff = 5) {
     tmp <- read.csv(each, row.names = 1, check.names = FALSE)
     tmp$sample <- gsub(".csv", "", basename(each))
 
-    index1 <- startsWith(colnames(tmp), ("1"))
-    index2 <- startsWith(colnames(tmp), ("2"))
-    index <- !(index1 | index2)
-    tmp <- tmp[, index]
+    position <- tmp$Position
+    area <- tmp$Area
+
+    removeCol <- c("ObjectNumber", "Position", "Area")
+    tmp <- tmp[, !(colnames(tmp) %in% removeCol)]
+
+    tmp <- cbind(tmp, "Position" = position)
+    tmp <- cbind(tmp, "Area" = area)
 
     ## modify the colnames
-    colnames(tmp) <- sapply(colnames(tmp), function(x) {
-      return(gsub("-", "", x))
-    })
-
     for (i in 1:length(colnames(tmp))) {
       if (colnames(tmp)[i] == "SMA") {
         colnames(tmp)[i] <- "AlphaSMA"
       }
     }
 
+    colnames(tmp) <- gsub(pattern = "-", replacement = "", colnames(tmp))
+
     total.res <- rbind(total.res, tmp)
   }
 
   meta <- read.csv(meta_csv_dir)
 
-  meta <- (subset(meta, normal == 1 | tumor == 1 | invasive == 1))
+  meta <- (subset(meta, normal == 1 | tumor == 1 | invasive == 1 | TLS == 1))
   meta$ID <- paste0(meta$sample, "_", meta$ROI)
 
-  total.res$ID <- total.res$sample
+  total.res$ID <- sapply(total.res$sample, function(x) {
+    temp <- strsplit(x, split = "_")[[1]]
+    return(paste0(temp[1], "_", temp[2]))
+  })
 
   total.res2 <- total.res[total.res$ID %in% meta$ID, ]
 
@@ -126,21 +131,14 @@ normData <- function(sce_data, marker_total, censor_val = NULL, arcsinh = FALSE,
     ) %>%
     dplyr::select(-index)
 
-  # summary(a)
-  # colnames(a)
   histdata <- melt(a, variable.name = "marker", value.name = "expression")
   p1 <- ggplot(data = histdata, aes(x = expression)) +
     geom_histogram(bins = 60, colour = "black", fill = "blue", alpha = 0.5) +
     facet_wrap(~marker, scale = "free")
 
-  p2 <- ggplot(data = histdata[histdata$expression != 0, ], aes(x = expression)) +
-    geom_histogram(bins = 60, colour = "black", fill = "blue", alpha = 0.5) +
-    facet_wrap(~marker, scale = "free")
-
-  pdf("test.pdf", height = 8, width = 6)
+  pdf("Marker Expression level.pdf", height = 8, width = 12)
   print(p1)
   dev.off()
-  print(p2)
   return(a)
 }
 
@@ -223,8 +221,8 @@ FlowSOM_clustering <- function(exp_df, norm_exp_df, markers, phenographOnly = F,
     if (!dir.exists(savePath)) {
       dir.create(savePath)
     }
-    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, method, "_flowsom_pheno_k",phenok,".csv"), row.names = FALSE)
-    write.csv(tsneplot, file = paste0(savePath, method, "_flowsom_pheno_tsne_k",phenok,".csv"), row.names = FALSE)
+    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, method, "_flowsom_pheno_k", phenok, ".csv"), row.names = FALSE)
+    write.csv(tsneplot, file = paste0(savePath, method, "_flowsom_pheno_tsne_k", phenok, ".csv"), row.names = FALSE)
   } else {
     tmp.pheno_out <- cytofkit::Rphenograph(norm_exp_df[, markers], k = k)
     norm_exp_df$cluster <- igraph::membership(tmp.pheno_out)
@@ -539,7 +537,7 @@ Annotate <- function(TsnecsvPath, ClustercsvPath, MajorTypeList, MinorTypeList, 
 
 
 ## markers expression heatmap
-MarkerHeatmap <- function(data, markers) {
+MarkerHeatmap <- function(data, markers, savePath) {
   dataBack <- data
 
   MinorType <- names(table(data$SubType))
@@ -582,12 +580,12 @@ MarkerHeatmap <- function(data, markers) {
   colnames(annotationRow) <- "MajorType"
 
   p <- pheatmap(plotdf[, 1:length(markers)],
-    cluster_rows = F, gaps_row = c(4, 8, 14,17),
+    cluster_rows = F, gaps_row = c(2, 5, 11, 14,20),
     cluster_cols = F, gaps_col = c(10, 19, 23, 28),
     annotation_row = annotationRow
   )
 
-  pdf(file = "./Cluster Markers Heatmap.pdf", width = 12, height = 8)
+  pdf(file = paste0(savePath,"Cluster Markers Heatmap.pdf"), width = 12, height = 8)
   print(p)
   dev.off()
 

@@ -42,7 +42,7 @@ load_clinical <- function(sce, clinicalFilePath) {
 }
 
 ## Merge abundance information
-MergeAbundanceResult <- function(sce) {
+MergeAbundanceResult <- function(sce, return.fraction = F) {
     ## celltypes and ROIs
     celltypes <- names(table(sce$SubType))
     ROIs <- names(table(sce$ID))
@@ -60,6 +60,13 @@ MergeAbundanceResult <- function(sce) {
         for (j in 1:nrow(abundanceTemp)) {
             rowTemp <- as.character(abundanceTemp[j, 1])
             AbundanceDF[rowTemp, i] <- as.numeric(abundanceTemp[j, 2])
+        }
+    }
+    if (return.fraction) {
+        numCell <- apply(AbundanceDF, MARGIN = 2, FUN = "sum")
+        numCell <- 1 / numCell
+        for (i in 1:ncol(AbundanceDF)) {
+            AbundanceDF[, i] <- AbundanceDF[, i] * numCell[i]
         }
     }
 
@@ -152,7 +159,7 @@ GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans =
     cellMeta <- colData(sceobj)
 
     ## ROI, major celltype and cell subtype names and other clinical information
-    ROIs <- names(table(cellMeta$filelist))
+    ROIs <- names(table(cellMeta$ID))
 
     SubTypes <- names(table(cellMeta[, countcol]))
     alltypes <- unique(c(SubTypes))
@@ -307,7 +314,7 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
     ## K-means clustering
     exp <- t(exp) ## row should be sample
     set.seed(619)
-    fit <- kmeans(exp, centers = ncluster, nstart = 25, iter.max = 100)
+    fit <- kmeans(exp, centers = ncluster, nstart = 25, iter.max = 500)
     table(fit$cluster)
 
     colData(sce_)[, ReclusterName] <- fit$cluster
@@ -546,7 +553,7 @@ PlotCertainTypeinPattern <- function(sce_, Col1, types1, Col2, groupCol, savePat
     return(NULL)
 }
 
-## Phenotype-associated cell label barplot
+## Phenotype-associated cell label Boxplot
 BoxPlotForPhenoAssCell <- function(plotdf, savePath) {
     plotdf$Relapse <- ifelse(plotdf$Relapse == 0, "Non-Relapse", "Relapse")
 
@@ -570,6 +577,50 @@ BoxPlotForPhenoAssCell <- function(plotdf, savePath) {
 
     return(NULL)
 }
+
+## Phenotype-associated cell label KM curve
+SurvivalForPhenoAssCell <- function(plotdf, savePath) {
+    ## merge patients
+    plotdf$PID <- sapply(as.character(plotdf$ROI), function(x) {
+        return(strsplit(x, split = "_")[[1]][1])
+    })
+
+    PIDs <- unique(plotdf$PID)
+    plotdf2 <- as.data.frame(matrix(data = NA, nrow = length(PIDs), ncol = 3))
+    rownames(plotdf2) <- PIDs
+
+    plotdf <- subset(plotdf, Pattern == "Pheno_plus")
+
+    for (pid in PIDs) {
+        temp <- subset(plotdf, PID == pid)
+        plotdf2[pid, ] <- c(mean(as.numeric(temp$Abundance)), temp[1, 4], temp[1, 5])
+    }
+    colnames(plotdf2) <- c("Abundance", "RFSS", "RFS_time")
+
+    plotdf2$Abundance <- ifelse(plotdf2$Abundance >= median(plotdf2$Abundance), "High", "Low")
+
+    plotdf2$RFSS <- as.numeric(plotdf2$RFSS)
+    plotdf2$RFS_time <- as.numeric(plotdf2$RFS_time)
+
+    fit <- survfit(Surv(RFS_time, RFSS) ~ Abundance, data = plotdf2)
+    p <- ggsurvplot(fit,
+        data = plotdf2,
+        linetype = c("solid", "solid"),
+        surv.median.line = "hv", surv.scale = "percent",
+        pval = T, risk.table = T,
+        conf.int = T, conf.int.alpha = 0.1, conf.int.style = "ribbon",
+        risk.table.y.text = T,
+        palette = c("#3300CC", "#CC3300"),
+        xlab = "Recurrence time"
+    )
+
+    pdf(paste0(savePath, "Suvival analysis for phenotype-associated cluster.pdf"), height = 6, width = 8)
+    print(p)
+    dev.off()
+
+    return(NULL)
+}
+
 
 ## calcualte FC
 FCandPvalueCal <- function(mat, xCol, yCol, need.sample = FALSE) {

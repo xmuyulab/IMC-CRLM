@@ -6,7 +6,7 @@ source("/home/lyx/project/IMC/abundance_functions.r")
 # clusterResult <- read.csv("/mnt/data/lyx/IMC/clustering/qc5_norm_asin_Idenmarke_flowsom_pheno.csv")
 clusterResult <- readRDS("/mnt/data/lyx/IMC/analysis/clustering/annotate_allcells.rds")
 
-print(colnames(clusterResult))
+
 table(clusterResult$filelist)
 
 ### PID
@@ -47,44 +47,53 @@ for (i in 1:nrow(qc)) {
     }
 }
 
-qc$tissueRegion[129] <- "IM"
+qc <- qc[!is.na(qc$QC), ]
 
-clusterResult$Tissue <- qc$tissueRegion[match(clusterResult$filelist, qc$filelist)]
+clusterResult$Tissue <- qc$tissueRegion[match(clusterResult$ID, qc$filelist)]
 table(clusterResult$Tissue)
 
 ## transform data into SingleCellExperiment object
-sce <- SCE_Transform(clusterResult, assay_col = c(1, 35), cellmeta_col = c(36, 49), clinical)
+print(colnames(clusterResult))
+sce <- SCE_Transform(clusterResult, assay_col = c(1, 35), cellmeta_col = c(36, 44), clinical)
 saveRDS(sce, paste0("/mnt/data/lyx/IMC/analysis/allsce.rds"))
 
 sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
 
-## abundance analysis
-countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), is.fraction = F)
+## plot cell marker expression value distribution
+savePath <- "/mnt/data/lyx/IMC/analysis/abundance/"
+table(sce$Batch)
+PlotMarkerExpDistribution(sce, savePath)
 
-xCol <- c(1,24)
+## abundance analysis
+countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
+
+xCol <- c(1, 21)
 abundanceVolcanoPlot(countdf, pthreshold = 0.05, fcthreshold = 1.2, xCol = xCol, clinicalFeatures = "RFS_status", savePath = savePath)
 
-celltypes2Plot <- c("CD8T", "NK", "B", "Mono_cDC_ITGAX", "Mono_Multi",  "Macro_CD14", "Macro_CD11b", "SC_VEGF","TC_EPCAM")
-abundanceBoxplot(countdf, celltypes2Plot, expCol = c(1, 24))
+celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Macro_Multi", "Macro_CD11b", "SC_Vimentin", "TC_Ki67")
+abundanceBoxplot(countdf, celltypes2Plot, expCol = xCol)
+
+## correlation analysis
+IM_plotdf <- subset(countdf, Tissue == "IM")
+IM_plotdf <- IM_plotdf[, c(xCol[1]:xCol[2])]
+CorrelationAnalysis(IM_plotdf, savePath = paste0(savePath, "IM_abundance_correlation.pdf"))
 
 ## meta analysis
 features <- c(
     "zs_rec_riskmodel", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
     "CRLM_number", "CRLM_size", "Live_involvement_num", "Pathology", "Differential_grad", "T_grade"
 )
-IM_plotdf <- MergeCountsofROI(countdf,tissue = "IM", expCol = c(1,24), scale = T)
-abundanceMetaAnalysis(IM_plotdf, celltypes2Plot, clinical, features)
+IM_plotdf <- MergeCountsofROI(countdf, tissue = "IM", expCol = xCol, scale = T)
+abundanceMetaAnalysis(IM_plotdf, celltypes2Plot, clinical, features, savePath)
 
 ## KM curve
+countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 IM_plotdf <- subset(countdf, Tissue == "IM")
 for (celltype in celltypes2Plot) {
-    KMVisualize(IM_plotdf, celltype, cutoff = "median", savePath = paste0("/mnt/data/lyx/IMC/analysis/abundance/IM_", celltype, "_KMCurve.pdf"))
+    KMVisualize(IM_plotdf, celltype, cutoff = "median", savePath = paste0(savePath, "KM/", "IM_", celltype, "_KMCurve.pdf"))
 }
 
-## correlation analysis
-IM_plotdf <- subset(countdf, Tissue == "IM")
-IM_plotdf <- IM_plotdf[, c(1:24)]
-CorrelationAnalysis(IM_plotdf, savePath = "/mnt/data/lyx/IMC/analysis/abundance/IM_abundance_correlation.pdf")
+
 
 
 
@@ -102,7 +111,7 @@ clinicalFeatures <- c(
     "CRLM_number", "CRLM_size", "Live_involvement_num", "CEA", "CA199", "Pathology", "Differential_grad", "T_grade", "Lymph_grade"
 )
 
-countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures =  clinicalFeatures, is.fraction = T)
+countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 
 ## clinical information
 
@@ -125,15 +134,13 @@ countdf$CA199 <- ifelse(as.numeric(countdf$CA199) >= 37, 1, 0) ## Pre-operation 
 ## Tumor grade
 ## Lymhonode grade: 1: positive, 0: negative
 
-xCol <- c(1,24)
+xCol <- c(1, 21)
 clinicalFeatures <- c(
     "Prognosis", "RFS_status", "Recurrence_site", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
     "CRLM_number", "CRLM_size", "Live_involvement_num", "CEA", "CA199", "Pathology", "Lymph_grade"
 )
 
-for(tissue in c("IM","CT","TAT")){
+for (tissue in c("IM", "CT", "TAT")) {
     CountMAT <- abundanceDotPlotMat(countdf, xCol = xCol, clinicalFeatures = clinicalFeatures, tissue = tissue)
     MultiCliDotplot(CountMAT, tissue = tissue, savePath)
 }
-
-

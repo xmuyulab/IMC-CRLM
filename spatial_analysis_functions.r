@@ -288,7 +288,7 @@ HeatmapForDiff <- function(ResultMat,MaskMat,savepath){
     return(NULL)
 }
 
-getResult2 <- function(ResultPath, sce, GroupInfo, groups, celltypes,savepath){
+getInteracDiff <- function(ResultPath, sce, GroupInfo, groups, celltypes,savepath){
 
     IDs1 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[1], ])
     IDs2 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[2], ])
@@ -297,6 +297,8 @@ getResult2 <- function(ResultPath, sce, GroupInfo, groups, celltypes,savepath){
     array2 <- LoadAnalysisResult(IDs2,celltypes, sce)
 
     TestDiff(array1,array2,celltypes,savepath)
+
+    return(NULL)
 }
 
 ## cox test

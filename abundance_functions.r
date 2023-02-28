@@ -9,9 +9,36 @@ library(forestplot)
 library(survminer)
 library(SingleCellExperiment)
 library(ggcor)
+library(ggridges)
+
+## Plot the marker distribution from different batch
+PlotMarkerExpDistribution <- function(sce, savePath){
+
+  ## create expression matrix
+  exp <- assay(sce)
+
+  genes <- rep(rownames(exp), times = ncol(exp))
+  values <- as.numeric(exp)
+  batches <- rep(sce$Batch, each = nrow(exp))
+
+  plotdf <- cbind("Marker" = genes,"Value" = values,"Batch" = batches)
+  plotdf <- as.data.frame(plotdf)
+  plotdf$Value <- as.numeric(plotdf$Value)
+
+  p <- ggplot(plotdf, aes(x = Value, y = Batch, fill = Batch)) +
+	geom_density_ridges(alpha = 0.25) +
+	theme_ridges() + 
+  facet_wrap(~Marker, ncol = 6)
+
+  pdf(paste0(savePath,"Marker Expression distribution from batches.pdf"),height = 9,width = 12)
+  print(p)
+  dev.off()
+  
+  return(NULL)
+}
 
 ## transform annotated data into SingleCellExperiment object
-SCE_Transform <- function(scedf, assay_col = c(1, 35), cellmeta_col = c(36, 49), clinical = NULL) {
+SCE_Transform <- function(scedf, assay_col, cellmeta_col, clinical = NULL) {
   cat("The dim of dataframe is ", dim(scedf), "\n")
   assay_ <- t(as.matrix(scedf[, assay_col[1]:assay_col[2]]))
   cellmeta_ <- scedf[, cellmeta_col[1]:cellmeta_col[2]]
@@ -37,7 +64,7 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatur
   cellMeta <- colData(sceobj)
 
   ## ROI, major celltype and cell subtype names and other clinical information
-  ROIs <- names(table(cellMeta$filelist))
+  ROIs <- names(table(cellMeta$ID))
 
   # MajorTypes <- names(table(cellMeta$MajorType))
   SubTypes <- names(table(cellMeta$SubType))
@@ -458,7 +485,7 @@ MultipleUniCOX <- function(df) {
   return(result)
 }
 
-abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features) {
+abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features,savePath) {
   ## PIDs
   plotdf <- as.data.frame(plotdf)
   plotdf$PID <- rownames(plotdf)
@@ -565,7 +592,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features) {
     )
   )
 
-  pdf("test.pdf", width = 12, height = 9)
+  pdf(paste0(savePath,"Multi-uniCOX.pdf"), width = 12, height = 9)
   print(p)
   dev.off()
 

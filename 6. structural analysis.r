@@ -18,9 +18,9 @@ sce
 GroupInfo <- load_clinical(sce = sce, clinicalFilePath = "/mnt/data/lyx/IMC/clinical.csv")
 
 ## merge celltype abundance into a dataframe
-AbundanceDF <- MergeAbundanceResult(sce)
+AbundanceDF <- MergeAbundanceResult(sce, return.fraction = T)
 
-selectCelltypes <- c("CD8T", "NK", "Macro_CD11b", "Macro_CD14", "Mono_cDC_ITGAX", "SC_VEGF", "TC_EPCAM") ## results from abundance analysis volcano plot
+selectCelltypes <- c("DPT", "Mono_CLEC9A", "Macro_Multi", "Macro_CD11b", "SC_Vimentin", "TC_Ki67") ## results from abundance analysis volcano plot
 
 celltypes <- names(table(sce$SubType))
 celltypes <- celltypes[!celltypes %in% selectCelltypes]
@@ -29,23 +29,23 @@ celltypes <- celltypes[!celltypes %in% selectCelltypes]
 distMat <- dist(t(AbundanceDF[selectCelltypes, ]), method = "euclidean")
 colclust <- hclust(distMat, method = "complete")
 
-k <- 20
+k <- 15
 TMEClusterID <- cutree(colclust, k = k)
 table(TMEClusterID)
 
 ## column annotation bar
 plotDF <- AbundanceDF[c(selectCelltypes, celltypes), ]
 
-annotationCol <- matrix(data = NA, nrow = ncol(plotDF), ncol = 4)
+annotationCol <- matrix(data = NA, nrow = ncol(plotDF), ncol = 3)
 annotationCol <- as.data.frame(annotationCol)
 
 rownames(annotationCol) <- colnames(plotDF)
-colnames(annotationCol) <- c("TME Archetypes", "RFSS", "KRAS Mutation", "CRC Site")
+colnames(annotationCol) <- c("TME Archetypes", "RFSS", "KRAS Mutation")
 
 annotationCol$`TME Archetypes` <- as.factor(as.numeric(TMEClusterID))
 annotationCol$RFSS <- ifelse(GroupInfo$RFS_status == 1, "Relaps", "Non-Relaps")
 annotationCol$`KRAS Mutation` <- ifelse(GroupInfo$KRAS_mutation == 1, "Mutate", "WT")
-annotationCol$`CRC Site` <- ifelse(GroupInfo$CRC_site == 1, "Right Colon", ifelse(GroupInfo$CRC_site == 2, "Left Colon", "Rectum"))
+# annotationCol$`CRC Site` <- ifelse(GroupInfo$CRC_site == 1, "Right Colon", ifelse(GroupInfo$CRC_site == 2, "Left Colon", "Rectum"))
 
 p <- pheatmap(plotDF,
     scale = "column", gaps_row = length(selectCelltypes), cutree_cols = k,
@@ -116,7 +116,7 @@ savePath <- "/mnt/data/lyx/IMC/analysis/spatial/"
 ## remain Tissue associated Tumor
 sce <- sce[, sce$Tissue == "IM"]
 # sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
-scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor_IM.csv")
+scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor.csv")
 scimapResult <- scimapResult[, -1]
 
 colnames(scimapResult)
@@ -141,11 +141,10 @@ ReMajorType <- c("Monocyte")
 ReclusterName <- "Monocyte"
 
 sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 10, savePath)
-
 # sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
 
 ## Certain reclustering types in cellular pattern
-interstType <- c("8", "10")
+interstType <- c("9")
 PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = interstType, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
 
 ## assign the new label
@@ -157,6 +156,8 @@ phenoLabelCountMat <- GetAbundance(sce_, countcol = "phenoLabel", is.fraction = 
 phenoLabelCountMat <- TransformIntoPlotMat(phenoLabelCountMat, valueCol = c(1:2))
 head(phenoLabelCountMat)
 BoxPlotForPhenoAssCell(phenoLabelCountMat, savePath)
+SurvivalForPhenoAssCell(phenoLabelCountMat, savePath)
+
 
 ## plot the differential expression genes
 sce_ <- sce_[, sce_$MajorType == ReMajorType]
