@@ -10,10 +10,10 @@ library(survminer)
 library(SingleCellExperiment)
 library(ggcor)
 library(ggridges)
+library(RColorBrewer)
 
 ## Plot the marker distribution from different batch
-PlotMarkerExpDistribution <- function(sce, savePath){
-
+PlotMarkerExpDistribution <- function(sce, savePath) {
   ## create expression matrix
   exp <- assay(sce)
 
@@ -21,19 +21,19 @@ PlotMarkerExpDistribution <- function(sce, savePath){
   values <- as.numeric(exp)
   batches <- rep(sce$Batch, each = nrow(exp))
 
-  plotdf <- cbind("Marker" = genes,"Value" = values,"Batch" = batches)
+  plotdf <- cbind("Marker" = genes, "Value" = values, "Batch" = batches)
   plotdf <- as.data.frame(plotdf)
   plotdf$Value <- as.numeric(plotdf$Value)
 
   p <- ggplot(plotdf, aes(x = Value, y = Batch, fill = Batch)) +
-	geom_density_ridges(alpha = 0.25) +
-	theme_ridges() + 
-  facet_wrap(~Marker, ncol = 6)
+    geom_density_ridges(alpha = 0.25) +
+    theme_ridges() +
+    facet_wrap(~Marker, ncol = 6)
 
-  pdf(paste0(savePath,"Marker Expression distribution from batches.pdf"),height = 9,width = 12)
+  pdf(paste0(savePath, "Marker Expression distribution from batches.pdf"), height = 9, width = 12)
   print(p)
   dev.off()
-  
+
   return(NULL)
 }
 
@@ -172,7 +172,7 @@ abundanceDotPlotMat <- function(countdf, xCol, clinicalFeatures, tissue) {
     returnDF <- rbind(returnDF, mat1_foldchangeMat)
   }
   colnames(returnDF) <- c("Celltype", "Foldchange", "P.value", "Feature", "Tissue")
-  returnDF <- summaryClinical(returnDF) 
+  returnDF <- summaryClinical(returnDF)
 
   return(returnDF)
 }
@@ -308,9 +308,9 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
 }
 
 ## Multiple clinical features Dotplot
-MultiCliDotplot <- function(plotdf, tissue, savePath){
+MultiCliDotplot <- function(plotdf, tissue, savePath) {
   plotdf$P.label <- ifelse(plotdf$P.value <= 0.001, "***", ifelse(plotdf$P.value <= 0.01, "**", ifelse(plotdf$P.value <= 0.05, "*", "n.s.")))
-  plotdf$lgPvalue <- ifelse(plotdf$P.value <= 0.001,4,ifelse(plotdf$P.value <= 0.01, 3, ifelse(plotdf$P.value <= 0.05, 2, 1)))
+  plotdf$lgPvalue <- ifelse(plotdf$P.value <= 0.001, 4, ifelse(plotdf$P.value <= 0.01, 3, ifelse(plotdf$P.value <= 0.05, 2, 1)))
   plotdf$log2Foldchange <- log2(as.numeric(plotdf$Foldchange))
 
   plotdf$log2Foldchange <- ifelse(plotdf$log2Foldchange > 1.5, 1.5, plotdf$log2Foldchange)
@@ -323,12 +323,12 @@ MultiCliDotplot <- function(plotdf, tissue, savePath){
       panel.grid.major = element_line(colour = "white"),
       panel.border = element_rect(colour = "white", fill = NA),
       axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    ) + 
-    scale_color_gradient2(low = "royalblue",mid = "white", high = "firebrick3")
+    ) +
+    scale_color_gradient2(low = "royalblue", mid = "white", high = "firebrick3")
 
-    pdf(paste0(savePath,"Multiple clinical features abundance differnt of ",tissue,".pdf"), height = 6, width = 10)
-    print(p)
-    dev.off()
+  pdf(paste0(savePath, "Multiple clinical features abundance differnt of ", tissue, ".pdf"), height = 6, width = 10)
+  print(p)
+  dev.off()
   return(NULL)
 }
 
@@ -485,7 +485,7 @@ MultipleUniCOX <- function(df) {
   return(result)
 }
 
-abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features,savePath) {
+abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, savePath) {
   ## PIDs
   plotdf <- as.data.frame(plotdf)
   plotdf$PID <- rownames(plotdf)
@@ -592,7 +592,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features,sav
     )
   )
 
-  pdf(paste0(savePath,"Multi-uniCOX.pdf"), width = 12, height = 9)
+  pdf(paste0(savePath, "Multi-uniCOX.pdf"), width = 12, height = 9)
   print(p)
   dev.off()
 
@@ -667,4 +667,74 @@ MergeCountsofROI <- function(countdf, tissue, expCol, scale = F) {
   PIDDF <- as.data.frame(PIDDF)
 
   return(PIDDF)
+}
+
+## Stack barplot to show the celltype fraction
+BarPlotForCelltypeFraction <- function(countDF, xCol, rowSep, colSep, savePath) {
+  Cellcounts <- countDF[, xCol[1]:xCol[2]]
+
+  celltypes <- rep(colnames(Cellcounts), each = nrow(Cellcounts))
+  rois <- rep(rownames(Cellcounts), times = ncol(Cellcounts))
+  counts <- as.numeric(as.matrix(Cellcounts))
+  tissues <- rep(countDF[, rowSep], times = ncol(Cellcounts))
+  groups <- rep(countDF[, colSep], times = ncol(Cellcounts))
+
+  plotdf <- cbind(counts, celltypes, rois, tissues, groups)
+  plotdf <- as.data.frame(plotdf)
+  colnames(plotdf) <- c("Counts", "Celltype", "ROI", "Tissue", "Relapse")
+
+  p <- ggplot(plotdf, aes(x = ROI, weight = mean, fill = Celltype)) +
+    geom_hline(yintercept = seq(25, 100, 25), color = "gray") +
+    geom_bar(color = "black", width = .7, position = "stack") +
+    labs(y = "Relative abundance (%)") +
+    scale_fill_brewer(palette = "Set3") +
+    scale_y_continuous(expand = c(0, 0)) +
+    theme_classic()
+}
+
+## Stack barplot to show the celltype fraction
+BarPlotForCelltypeFraction <- function(sce, rowSep, colSep, savePath) {
+  meta <- colData(sce)
+
+  Majortypes <- meta[, "MajorType"]
+  Subtypes <- meta[, "SubType"]
+  IDs <- meta[, "ID"]
+  Tissues <- meta[, rowSep]
+  Groups <- meta[, colSep]
+
+  plotdf <- cbind(Majortypes, Subtypes, IDs, Tissues, Groups)
+  plotdf <- as.data.frame(plotdf)
+  colnames(plotdf) <- c("Majortype", "Subtype", "ROI", "Tissue", "Relapse")
+
+  colors <- c(brewer.pal(9, "Set1"), brewer.pal(8, "Set2"), brewer.pal(12, "Set3"))
+  plotdf$Subtype <- as.factor(plotdf$Subtype)
+  plotdf$Majortype <- as.factor(plotdf$Majortype)
+
+  savePath2 <- paste0(savePath, "AbundanceFraction/")
+  if (!file.exists(savePath2)) {
+    dir.create(savePath2)
+  }
+
+  for (tissue in names(table(Tissues))) {
+    plotdfTemp1 <- subset(plotdf, Tissue == tissue)
+    for (group in names(table(Groups))) {
+      plotdfTemp2 <- subset(plotdfTemp1, Relapse == group)
+
+      p <- ggplot(plotdfTemp2, aes(x = ROI, fill = Subtype)) +
+        geom_bar(stat = , color = "black", width = .5, position = "fill") +
+        labs(y = "Relative abundance (%)") +
+        scale_fill_manual(values = colors) +
+        scale_y_continuous(expand = c(0, 0)) +
+        theme_classic() +
+        theme(
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5, size = 5)
+        )
+
+      pdf(paste0(savePath2, "Abundance Barplot of Relapse_", group, " in ", tissue, ".pdf"), height = 6, width = 8)
+      print(p)
+      dev.off()
+    }
+  }
+
+  return(NULL)
 }

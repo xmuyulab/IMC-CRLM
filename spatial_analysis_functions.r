@@ -269,6 +269,7 @@ getSig <- function(dc) {
   return(sc)
 } 
 
+## Modify
 HeatmapForDiff <- function(ResultMat,MaskMat,savepath){
     sig_mat <- matrix(sapply(ResultMat, getSig), nrow = nrow(ResultMat))
 
@@ -276,9 +277,9 @@ HeatmapForDiff <- function(ResultMat,MaskMat,savepath){
     
     p <- pheatmap(
         plotdf,
-        cellwidth = 20, cellheight = 15,
+        cellwidth = 15, cellheight = 15,
         cluster_row = F, cluster_col = F,
-        legend_labels = c("Non-Rec","Rec"),legend_breaks = c(-1.3,1.3),
+        legend_labels = c("Low-correlation","High-correlation"),legend_breaks = c(-1.3,1.3),
         angle_col = '45', display_numbers = sig_mat, fontsize_number = 15
     )
     pdf(savepath, width = 15, height = 15)

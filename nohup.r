@@ -14,7 +14,7 @@ ROIs <- names(table(sce_$ID))
 CellMaskPath <- "/mnt/data/lyx/IMC/unet/predictionProbability/ori_cellmask/"
 ChannelPath <- "/mnt/data/lyx/IMC/IMCell_Output/save_img/raw/"
 
-channels2plot <- c("CLEC9A", "CD14","CD57")
+channels2plot <- c("CLEC9A", "CD57")
 celltypes2plot <- c("Mono_CLEC9A", "Mono_Multi")
 
 for (ROI in ROIs) {

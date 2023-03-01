@@ -65,12 +65,16 @@ table(sce$Batch)
 PlotMarkerExpDistribution(sce, savePath)
 
 ## abundance analysis
+clinicalFeatures <- c(
+    "Tissue", "Prognosis", "RFS_status", "RFS_time", "Recurrence_site", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
+    "CRLM_number", "CRLM_size", "Live_involvement_num", "CEA", "CA199", "Pathology", "Differential_grad", "T_grade", "Lymph_grade"
+)
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 
 xCol <- c(1, 21)
 abundanceVolcanoPlot(countdf, pthreshold = 0.05, fcthreshold = 1.2, xCol = xCol, clinicalFeatures = "RFS_status", savePath = savePath)
 
-celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Macro_Multi", "Macro_CD11b", "SC_Vimentin", "TC_Ki67")
+celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Mono_Classic", "Mono_CD57", "Macro_Multi", "Macro_CD11b", "SC_Vimentin", "TC_Ki67", "TC_TIGHT")
 abundanceBoxplot(countdf, celltypes2Plot, expCol = xCol)
 
 ## correlation analysis
@@ -83,20 +87,26 @@ features <- c(
     "zs_rec_riskmodel", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
     "CRLM_number", "CRLM_size", "Live_involvement_num", "Pathology", "Differential_grad", "T_grade"
 )
-IM_plotdf <- MergeCountsofROI(countdf, tissue = "IM", expCol = xCol, scale = T)
+IM_plotdf <- MergeCountsofROI(countdf, tissue = "TAT", expCol = xCol, scale = T)
 abundanceMetaAnalysis(IM_plotdf, celltypes2Plot, clinical, features, savePath)
 
 ## KM curve
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
-IM_plotdf <- subset(countdf, Tissue == "IM")
-for (celltype in celltypes2Plot) {
-    KMVisualize(IM_plotdf, celltype, cutoff = "median", savePath = paste0(savePath, "KM/", "IM_", celltype, "_KMCurve.pdf"))
+for (tissue in c("IM", "CT", "TAT")) {
+    IM_plotdf <- subset(countdf, Tissue == tissue)
+    for (celltype in celltypes2Plot) {
+        KMVisualize(IM_plotdf, celltype, cutoff = "median", savePath = paste0(savePath, "KM/", tissue, "_", celltype, "_KMCurve.pdf"))
+    }
 }
 
+## cell type fraction barplot
+clinicalFeatures <- c("Tissue","RFS_status")
+countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = F)
 
+dim(countdf)
+head(countdf)
 
-
-
+BarPlotForCelltypeFraction(sce,rowSep="Tissue",colSep="RFS_status",savePath)
 
 ## Other clinical information subgroup abundance analysis
 library(SingleCellExperiment)
@@ -144,3 +154,4 @@ for (tissue in c("IM", "CT", "TAT")) {
     CountMAT <- abundanceDotPlotMat(countdf, xCol = xCol, clinicalFeatures = clinicalFeatures, tissue = tissue)
     MultiCliDotplot(CountMAT, tissue = tissue, savePath)
 }
+
