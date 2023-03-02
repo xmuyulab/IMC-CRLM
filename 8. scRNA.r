@@ -329,6 +329,54 @@ p <- DotPlot(Myeloid_seurat, features = makers_list) +
 print(p)
 dev.off()
 
+### Epithelial
+Epithelial_seurat <- subset(seuratobj, subset = Cell_type == "Epithelial cell")
+
+Epithelial_seurat <- RunPCA(object = Epithelial_seurat)
+Epithelial_seurat <- FindNeighbors(Epithelial_seurat, dims = 1:10)
+
+test_seurat <- FindClusters(object = Epithelial_seurat, resolution = c(seq(0, 1.8, .2)))
+p <- clustree(test_seurat@meta.data, prefix = "RNA_snn_res.")
+pdf(paste0(savePath, "GSE178318 Epithelial clustree.pdf"), width = 9, height = 12)
+print(p)
+dev.off()
+
+Epithelial_seurat <- FindClusters(Epithelial_seurat, resolution = 0.8)
+Epithelial_seurat <- RunUMAP(Epithelial_seurat, dims = 1:10)
+
+## rename clusters
+new.cluster.ids <- c(
+    "Mono_Claasic", "pDC", "Macro_CD14", "Mono_Claasic", "cDC_CD1C", "Macro_SIGLEC1",
+    "Macro_CD14", "Macro_SPP1", "Macro_HLADA", "Mono_CD11c", "Macro_CD11b",
+    "cDC_CLE79A"
+)
+
+names(new.cluster.ids) <- levels(Epithelial_seurat)
+Epithelial_seurat <- RenameIdents(Epithelial_seurat, new.cluster.ids)
+Cell_subtype <- as.character(Epithelial_seurat@active.ident)
+Epithelial_seurat@meta.data$Cell_subtype <- Cell_subtype
+
+### save the cell subtype information into whole seurat object
+seuratobj@meta.data$Cell_subtype[match(rownames(Epithelial_seurat@meta.data), rownames(seuratobj@meta.data))] <- Cell_subtype
+
+### umap plot
+pdf(file = paste0(savePath, "GSE178318 Epithelial annotation.pdf"), width = 12, height = 7.5)
+p1 <- DimPlot(Epithelial_seurat, reduction = "umap", label = T, pt.size = 0.5, label.size = 5, combine = T) +
+    theme(plot.title = element_text(hjust = 0.5))
+print(p1)
+dev.off()
+
+## makers
+pdf(file = paste0(savePath, "GSE178318 Epithelial maker dotplot.pdf"), width = 10, height = 7.5)
+if (1) {
+    makers_list <- list()
+    makers_list[["Macrophages"]] <- c("EPCAM", "MKI67", "VEGFA", "CA9", "HK2", "FAP", "FASN", "CD80", "CD27", "PDCD1", "CD274")
+}
+p <- DotPlot(Epithelial_seurat, features = makers_list) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print(p)
+dev.off()
+
 table(seuratobj@meta.data$Cell_subtype)
 table(seuratobj@meta.data$Cell_type)
 saveRDS(seuratobj, paste0(savePath, "Seurat_CRCLM_anno.rds"))

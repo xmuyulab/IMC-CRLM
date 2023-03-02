@@ -131,7 +131,9 @@ def Permutation(neiMat,celllabel,perm_n=1001):
         else:
             shuffle(permuLabel)
 
-        print("Perform permutation test: "+str(i))
+        if (i % 100 == 0):
+            print("Perform permutation test: "+str(i))
+
         interactNumMat = np.zeros(shape=(numlabel,numlabel)).astype(np.int0)
         interactNumMat = pd.DataFrame(interactNumMat)
         interactNumMat.columns = alllabel

@@ -180,26 +180,16 @@ LoadAnalysisResult <- function(IDs1,celltypes,sce){
         csvTemp <- csvTemp[, -1]
         csvTemp <- as.matrix(csvTemp)
 
-        rownameTemp <- rownames(csvTemp)
-        colnameTemp <- colnames(csvTemp)
-
-
-        TempMat <- matrix(data = NA, nrow = numtypes, ncol = numtypes)
-        colnames(TempMat) <- celltypes
-        rownames(TempMat) <- celltypes
-
         ## sort the interaction number
         if (nrow(csvTemp) != numtypes) {
-            for (j in 1:nrow(csvTemp)) {
-                for (z in 1:ncol(csvTemp)) {
-                    c1 <- rownameTemp[j]
-                    c2 <- colnameTemp[z]
+            TempMat <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
+            colnames(TempMat) <- celltypes
+            rownames(TempMat) <- celltypes
 
-                    numc1 <- ncol(sceTemp[, sceTemp$SubType == c1])
-                    numc2 <- ncol(sceTemp[, sceTemp$SubType == c2])
-
-                    TempMat[c1, c2] = round(csvTemp[j, z] / (numc1+numc2), 6) 
-                }
+            ## match the names of csvTemp and TempMat
+            for(j in 1:ncol(csvTemp)){
+                colName <- colnames(csvTemp)[j]
+                TempMat[match(rownames(csvTemp),rownames(TempMat)),colName] <- csvTemp[,j]
             }
         } 
         else {
@@ -234,18 +224,19 @@ LoadAnalysisResult <- function(IDs1,celltypes,sce){
 
 TestDiff <- function(array1,array2,celltypes,savepath){
     numtypes <- length(celltypes)
-    ResultMat <- matrix(data = NA, nrow = numtypes, ncol = numtypes)
-    rownames(ResultMat) <- celltypes
-    colnames(ResultMat) <- celltypes
+    PvalueMat <- matrix(data = NA, nrow = numtypes, ncol = numtypes)
+    rownames(PvalueMat) <- celltypes
+    colnames(PvalueMat) <- celltypes
 
-    MaskMat <- ResultMat
+    MaskMat <- PvalueMat
+    FoldChangeMat <- PvalueMat
 
-    for (i in 1:nrow(ResultMat)) {
-        for (j in 1:ncol(ResultMat)) {
+    for (i in 1:nrow(PvalueMat)) {
+        for (j in 1:ncol(PvalueMat)) {
             value1 <- as.numeric(na.omit(array1[i, j, ]))
             value2 <- as.numeric(na.omit(array2[i, j, ]))
 
-            ResultMat[i, j] <- t.test(value1, value2)$p.value
+            PvalueMat[i, j] <- t.test(value1, value2)$p.value
 
             if(mean(value1) < mean(value2)){
                 MaskMat[i, j] <- 1
@@ -253,10 +244,14 @@ TestDiff <- function(array1,array2,celltypes,savepath){
             else {
                MaskMat[i, j] <- -1
             }
+
+            FoldChangeMat[i,j] <- mean(value1) / mean(value2)
         }
     }
-    ResultMat <- -log10(ResultMat)
-    HeatmapForDiff(ResultMat,MaskMat,savepath)
+    PvalueMat <- -log10(PvalueMat)
+    FoldChangeMat <- log2(FoldChangeMat)
+
+    HeatmapForDiff(PvalueMat,MaskMat,FoldChangeMat,savepath)
 
     return(NULL)
 }
@@ -270,19 +265,19 @@ getSig <- function(dc) {
 } 
 
 ## Modify
-HeatmapForDiff <- function(ResultMat,MaskMat,savepath){
-    sig_mat <- matrix(sapply(ResultMat, getSig), nrow = nrow(ResultMat))
+HeatmapForDiff <- function(PvalueMat,MaskMat,FoldChangeMat,savepath){
+    sig_mat <- matrix(sapply(PvalueMat, getSig), nrow = nrow(PvalueMat))
 
-    plotdf <- ResultMat * MaskMat
+    plotdf <- FoldChangeMat #* MaskMat
     
     p <- pheatmap(
         plotdf,
-        cellwidth = 15, cellheight = 15,
-        cluster_row = F, cluster_col = F,
-        legend_labels = c("Low-correlation","High-correlation"),legend_breaks = c(-1.3,1.3),
-        angle_col = '45', display_numbers = sig_mat, fontsize_number = 15
+        cellwidth = 16, cellheight = 12,
+        cluster_row = T, cluster_col = T,
+        #legend_labels = c("Up-regulated","down-regulated"),legend_breaks = c(-0.5,0.5),
+        angle_col = '90', display_numbers = sig_mat, fontsize_number = 15
     )
-    pdf(savepath, width = 15, height = 15)
+    pdf(savepath, width = 10, height = 8)
     print(p)
     dev.off()
 

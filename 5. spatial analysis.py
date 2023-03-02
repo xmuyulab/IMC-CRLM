@@ -19,18 +19,22 @@ adata = MergeClinical(expPath, clinicalPath, qcPath, 35)
 adata
 
 ## IM/CT ROIs to scimap spatial analysis
-adata = adata[adata.obs['Tissue'].isin(["IM"]),]
+adata = sc.read_h5ad("/mnt/data/lyx/IMC/analysis/spatial/adata.h5ad")
+for tissue in ["CT","TAT","IM"]:
+    adata_ = adata[adata.obs['Tissue'].isin([tissue]),]
 #adata = adata[adata.obs['Tissue'].isin(["IM","CT"]),]
 
 ## scanpy pre-processing
-adata.var_names = adata.var["Marker"]
+#adata.var_names = adata.var["Marker"]
 
 
 ## scimap analysis pipeline
 ### 1. spatial count: compute a neighbourhood matrix using radius method or KNN method
-adata = sm.tl.spatial_count(adata, x_coordinate='x', y_coordinate='y',
-                            phenotype='SubType', method='radius', radius=30,
-                            imageid='ID', subset=None, label='spatial_count_radius_30')
+#n_radiusVec = [10,20,30]
+#for radius in n_radiusVec:
+#    adata = sm.tl.spatial_count(adata, x_coordinate='x', y_coordinate='y',
+#                                phenotype='SubType', method='radius', radius=radius,
+#                                imageid='ID', subset=None, label=('spatial_count_radius_'+str(radius)))
 
 n_neighborsVec = [10,20,30]
 for n_neighbors in n_neighborsVec:
@@ -44,8 +48,8 @@ for n_neighbors in n_neighborsVec:
 #                                 use_raw=False, log=False, subset=None, label='spatial_expression_radius')
 
 #adata = sm.tl.spatial_expression(adata, x_coordinate='x', y_coordinate='y',
-#                                 method='knn', knn=10, imageid='ID',
-#                                 use_raw=False, subset=None, label='spatial_expression_knn')
+#                                 method='knn', knn=n_neighbors, imageid='ID',
+#                                 use_raw=False, subset=None, label='spatial_expression_knn_'+str(n_neighbors))
 
 ### 3. spatial aggregates: find regions of aggregration of similar cells.
 # Use the purity parameter to fine-tune percent of similar cells within a given radius
@@ -58,6 +62,13 @@ for n_neighbors in n_neighborsVec:
 #                                imageid='ID', subset=None, label='spatial_aggregate_knn')
 
 ### 4. Clustering the spatial count and expression
+#for radius in n_radiusVec:
+#    kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata.uns[('spatial_count_radius_'+str(radius))])
+
+#    cluster_labels = list(map(str,kmeans.labels_))
+#    cluster_labels = list(map(lambda orig_string: 'kmeans' + '_' + orig_string, cluster_labels))
+#    adata.obs[('kmeans_radius_'+str(radius))] = cluster_labels
+
 for n_neighbors in n_neighborsVec:
     kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata.uns[('spatial_count_knn_'+str(n_neighbors))])
 
@@ -69,7 +80,7 @@ for n_neighbors in n_neighborsVec:
 savePath = "/mnt/data/lyx/IMC/analysis/spatial/"
 if not os.path.exists(savePath):
     os.mkdir(savePath)
-adata.obs.to_csv(savePath+"cellular_neighbor.csv")
+adata.obs.to_csv(savePath+"cellular_neighbor_"+tissue+".csv")
 
 ### 5. Motif: spatial_lda
 adata = sm.tl.spatial_lda(adata, x_coordinate='x', y_coordinate='y',
@@ -173,3 +184,36 @@ if multiprocess:
 ## Merge permutation results
 ResultPath = "/mnt/data/lyx/IMC/analysis/spatial/permutation/"
 types = [str(x) for x in Counter(adata.obs["SubType"]).keys()]
+
+## all 
+adata = sc.read_h5ad("/mnt/data/lyx/IMC/analysis/spatial/adata.h5ad")
+for tissue in ["CT","TAT","IM"]:
+    adata_ = adata[adata.obs['Tissue'].isin([tissue]),]
+
+    n_neighborsVec = [10,20,30]
+    for n_neighbors in n_neighborsVec:
+        adata_ = sm.tl.spatial_count(adata_, x_coordinate='x', y_coordinate='y',
+                                    phenotype='SubType', method='knn',knn=n_neighbors,
+                                    imageid='ID', subset=None, label=('spatial_count_knn_'+str(n_neighbors)))
+
+    for n_neighbors in n_neighborsVec:
+        kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata_.uns[('spatial_count_knn_'+str(n_neighbors))])
+
+        cluster_labels = list(map(str,kmeans.labels_))
+        cluster_labels = list(map(lambda orig_string: 'kmeans' + '_' + orig_string, cluster_labels))
+        adata_.obs[('kmeans_knn_'+str(n_neighbors))] = cluster_labels
+
+    #### save the clustering result
+    savePath = "/mnt/data/lyx/IMC/analysis/spatial/"
+    if not os.path.exists(savePath):
+        os.mkdir(savePath)
+    adata_.obs.to_csv(savePath+"cellular_neighbor_"+tissue+".csv")
+
+    ## Permutation test
+    IDs = [x for x in Counter(adata_.obs["ID"]).keys()]
+
+    multiprocess = True
+    if multiprocess:
+        multi_threads = 99
+        with Pool(multi_threads) as p:
+            p.starmap(PermutationTestMain, [(adata_, ID, 22,os.path.join(("/mnt/data/lyx/IMC/analysis/spatial/permutation_"+tissue),ID)) for ID in IDs])
