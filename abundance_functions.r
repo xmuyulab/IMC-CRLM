@@ -83,13 +83,7 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatur
     cellnum <- nrow(coldataTemp)
 
     ## count cells
-    # MajorTem <- as.data.frame(t(table(coldataTemp$MajorType)))
-    # MajorTem$Freq <- round(MajorTem$Freq / cellnum, digits = 4)
-
     SubTem <- as.data.frame(t(table(coldataTemp$SubType)))
-    # SubTem$Freq <- round(SubTem$Freq / sum(SubTem$Freq), digits = 4)
-
-    # CellCountMat[match(ROI, rownames(CellCountMat)), match(MajorTem$Var2, colnames(CellCountMat))] <- MajorTem$Freq
     if (is.fraction) {
       CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq / cellnum
     }
@@ -333,95 +327,40 @@ MultiCliDotplot <- function(plotdf, tissue, savePath) {
 }
 
 ## abundance boxplot
-abundanceBoxplot <- function(plotdf, celltypes2Plot, expCol = c(1, 27)) {
-  plotdf2 <- CountMat2Plotdf(plotdf, expCol)
-  plotdf3 <- plotdf2[plotdf2$Celltype %in% celltypes2Plot, ]
+abundanceBoxplotMat <- function(plotdf, celltypes2Plot = NULL, MetaCol, expCol, filename) {
+  plotdf2 <- CountMat2Plotdf(plotdf, MetaCol, expCol)
+  
+  if(is.null(celltypes2Plot)){
+    return(plotdf2)
+  }
+  else {
+       plotdf3 <- plotdf2[plotdf2$Celltype %in% celltypes2Plot, ]
+    return(plotdf3)
 
-  p <- ggplot(data = plotdf3, aes(x = Tissue, y = Abundance, fill = Recurrence)) +
-    geom_boxplot(alpha = 0.7) +
-    scale_y_continuous(name = "Cell Abundance") +
-    scale_x_discrete(name = "Cell Population") +
-    ggtitle("Boxplot of cell type abundance") +
-    theme_bw() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      text = element_text(size = 12),
-      axis.title = element_text(face = "bold"),
-      axis.text.x = element_text(size = 11, angle = 90)
-    ) +
-    facet_wrap(~Celltype, ncol = 3) +
-    scale_fill_lancet() +
-    stat_compare_means(aes(group = Recurrence), label.y = 0.5, method = "t.test")
-
-  pdf("/mnt/data/lyx/IMC/analysis/abundance/abundance_analysis(rec).pdf", width = 15, height = 8)
-  print(p)
-  dev.off()
-
-  if (F) {
-    p <- ggplot(data = plotdf2, aes(x = Prognosis, y = Abundance, fill = Prognosis)) +
-      geom_boxplot(alpha = 0.7) +
-      scale_y_continuous(name = "Cell Abundance") +
-      scale_x_discrete(name = "Cell Population") +
-      ggtitle("Boxplot of cell type abundance") +
-      theme_bw() +
-      theme(
-        plot.title = element_text(size = 14, face = "bold"),
-        text = element_text(size = 12),
-        axis.title = element_text(face = "bold"),
-        axis.text.x = element_text(size = 11, angle = 90)
-      ) +
-      facet_wrap(~Celltype) +
-      scale_fill_lancet() +
-      stat_compare_means(aes(group = Prognosis), p.adjust.method = "BH", label.y = 0.6)
-
-    pdf("/mnt/data/lyx/IMC/abundance/abundance_analysis(prog).pdf", width = 12, height = 9)
-    print(p)
-    dev.off()
   }
 
-  return(NULL)
 }
 
 ## Convert count matrix into plot dataframe
-CountMat2Plotdf <- function(plotdf, expCol = expCol) {
+CountMat2Plotdf <- function(plotdf, MetaCol, expCol) {
   ### matrix transform
-  sum_ <- c()
-
-  ## calculate fraction
-  for (i in 1:nrow(plotdf)) {
-    sumTemp <- sum(plotdf[i, (expCol[1]):expCol[2]])
-    sum_ <- c(sum_, sumTemp)
-  }
-  for (i in 1:nrow(plotdf)) {
-    plotdf[i, (expCol[1]):expCol[2]] <- round(plotdf[i, (expCol[1]):expCol[2]] / sum_[i], digits = 5)
-  }
-  plotdf2 <- data.frame(matrix(data = NA, nrow = nrow(plotdf) * expCol[2]))
-
-  abundanceVec <- c()
-  typeVec <- rep(colnames(plotdf)[expCol[1]:expCol[2]], each = nrow(plotdf))
-  TissueVec <- rep(plotdf$Tissue, times = ncol(plotdf2))
-  # progVec <- rep(plotdf$Prognosis, times = ncol(plotdf2))
-  RFSsTimeVec <- rep(plotdf$RFS_time, times = ncol(plotdf2))
-  RFSsVec <- rep(plotdf$RFS_status, times = ncol(plotdf2))
-
-
-  for (i in 1:expCol[2]) {
-    abundanceVec <- c(abundanceVec, as.numeric(plotdf[, i]))
+  abundanceVec <- as.numeric(as.matrix(plotdf[, expCol[1]:expCol[2]]))
+  cellsubtypeVec <- rep(colnames(plotdf[, expCol[1]:expCol[2]]),each=nrow(plotdf))
+  metaList <- list()
+  for(i in 1:length(MetaCol)){
+    metaList[[MetaCol[i]]] <- rep(as.character(plotdf[,MetaCol[i]]),times = ncol(plotdf))
   }
 
-  plotdf2$Abundance <- abundanceVec
-  plotdf2$Celltype <- typeVec
-  plotdf2$Tissue <- TissueVec
-  # plotdf2$Prognosis <- progVec
-  plotdf2$RecurrenceTime <- RFSsTimeVec
-  plotdf2$Recurrence <- RFSsVec
-  plotdf2 <- plotdf2[, -1]
-
-  plotdf2$Recurrence <- ifelse(plotdf2$Recurrence == 1, "Relapse", "Non Relapse")
-  # plotdf2$Prognosis <- ifelse(plotdf2$Prognosis == 1, "Worse", "Better")
-
-  plotdf2$Recurrence <- as.factor(plotdf2$Recurrence)
-  # plotdf2$Prognosis <- as.factor(plotdf2$Prognosis)
+  plotdf2 <- cbind(abundanceVec, cellsubtypeVec, metaList[[1]])
+  plotdf2 <- as.data.frame(plotdf2)
+  plotdf2[, 1] <- as.numeric(plotdf2[, 1])
+  
+  for(i in 2:length(metaList)){
+    plotdf2 <- cbind(plotdf2, metaList[[i]])
+    plotdf2[,i] <- as.factor(plotdf2[,i])
+  }
+  
+  colnames(plotdf2) <- c("Abundance", "Celltype",MetaCol)
 
   return(plotdf2)
 }
@@ -600,14 +539,19 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, sa
 }
 
 ## Kaplan-Meier curve
-KMVisualize <- function(df, celltype, cutoff = "median", savePath = NULL) {
+KMVisualize <- function(df, celltype, cutoff = "best", savePath = NULL) {
   df <- df[, c(celltype, "RFS_status", "RFS_time")]
 
   if (cutoff == "median") {
-    df[, celltype] <- ifelse(df[, 1] >= median(df[, 1]), "high", "low")
+    df[, 1] <- ifelse(df[, 1] >= median(df[, 1]), "high", "low")
   }
   if (cutoff == "mean") {
-    df[, celltype] <- ifelse(df[, 1] >= mean(df[, 1]), "high", "low")
+    df[, 1] <- ifelse(df[, 1] >= mean(df[, 1]), "high", "low")
+  }
+  if(cutoff == "best"){
+    cutpoint <- surv_cutpoint(data = df, time = "RFS_time", event = "RFS_status", variables = celltype)
+    cutpoint <- summary(cutpoint)$cutpoint
+    df[, 1] <- ifelse(df[, 1] >= cutpoint, "high", "low")
   }
 
   ## km curve

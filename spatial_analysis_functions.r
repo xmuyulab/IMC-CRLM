@@ -634,10 +634,9 @@ MedianFilter <- function(mat,filterSize = 3){
 
 ## Visualize the cellsubtype, cell mask and channel of ROI
 VisTypeMaskChannel <- function(sce, ROI, celltypes, channel, maskPath, channelPath, SavePath){
+    if (!dir.exists(SavePath)) {dir.create(SavePath)}
     SavePath <- paste0(SavePath,ROI,"/")
-    if (!dir.exists(SavePath)) {
-        dir.create(SavePath)
-    }
+    if (!dir.exists(SavePath)) {dir.create(SavePath)}
     
     MaskMat <- LoadCellMask(maskPath, ROI)
     ChannelArray <- LoadChannelImage(channelPath, ROI, channel)
