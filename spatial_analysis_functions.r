@@ -6,6 +6,7 @@ library(SingleCellExperiment)
 library(survival)
 library(rtiff)
 library(tiff)
+library(ggDoubleHeat)
 
 ### Make groupInfo file
 GetGroupInfo <- function(sce, clinical){
@@ -158,6 +159,50 @@ BubblePlot <- function(MergeDF,LabelDF,savePath){
 
     return(NULL)
 
+}
+
+## Double heatmap
+DoubleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, plot = "circle", savePath) {
+    DF1 <- MergeDF1 * labelDF1
+    DF2 <- MergeDF2 * labelDF2
+
+    plotdf <- matrix(data = 0, nrow = nrow(DF1) * ncol(DF1), ncol = 4)
+    plotdf <- as.data.frame(plotdf)
+
+    plotdf[,1] <- rep(rownames(DF1),times=ncol(DF1))
+    plotdf[,2] <- rep(colnames(DF1),each=nrow(DF1))
+    plotdf[,3] <- as.numeric(as.matrix(DF1))
+    plotdf[,4] <- as.numeric(as.matrix(DF2))
+    
+    colnames(plotdf) <- c("Celltype1","Celltype2","Interaction1","Interaction2")
+
+     if (plot == "heatmap") {
+         p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
+             geom_heat_tri(
+                 upper = Interaction1, lower = Interaction2,
+                 upper_name = c(group1), lower_name = c(group2),
+                 lower_colors = c("#075fd5", "white", "#fd6a78"),
+                 upper_colors = c("#075fd5", "white", "#fd6a78")
+             ) +
+             theme_bw() +
+             theme(axis.text.x = element_text(angle = 90, hjust = 1))
+     }
+    if(plot == "circle"){
+            p<- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
+geom_heat_circle(outside = Interaction2,
+inside= Interaction1,
+outside_colors= c('#075fd5','white','#fd6a78'),
+inside_colors= c('#075fd5','white','#fd6a78'))+
+theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+    }
+
+    pdf(savePath,height = 6,width = 8)
+    print(p)
+    dev.off()
+
+    return(NULL)
 }
 
 ## t-test for interaction number between groups
