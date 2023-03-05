@@ -142,14 +142,40 @@ CompareCellularPattern <- function(sce, sep = "RFS_status", countcol = "kmeans_k
 
     BoxPlotForCellular(abundance1, abundance2, valueCol = c(1:n_cluster), savePath)
 
-    ## Patient-level KM
-    abundance1 <- GetAbundance(sceobj = sce1, countcol = countcol, is.reuturnMeans = T)
-    abundance2 <- GetAbundance(sceobj = sce2, countcol = countcol, is.reuturnMeans = T)
+    return(NULL)
+}
 
-    clusters <- colnames(abundance2)[1:n_cluster]
-    for (cluster in clusters) {
-        KMForCellular(abundance1, abundance2, valueCol = c(1:n_cluster), cluster = cluster, savePath)
-    }
+## Cellular pattern fraction
+CNPFraction <- function(countDF, groupBy, xCol, savePath) {
+    groups <- names(table(countDF[, groupBy]))
+
+    DFg1 <- countDF[which(countDF[, groupBy] == groups[1]), xCol[1]:xCol[2]]
+    DFg2 <- countDF[which(countDF[, groupBy] == groups[2]), xCol[1]:xCol[2]]
+
+    DFg1 <- apply(DFg1, MARGIN = 2, FUN = "sum")
+    DFg2 <- apply(DFg2, MARGIN = 2, FUN = "sum")
+
+    DFg1 <- DFg1 / sum(DFg1)
+    DFg2 <- DFg2 / sum(DFg2)
+
+    ValueVec <- c(as.numeric(DFg1), as.numeric(DFg2))
+    CNPVec <- rep(names(DFg1), times = 2)
+    GroupVec <- rep(groups, each = length(DFg1))
+
+    plotdf <- cbind.data.frame(ValueVec, CNPVec, GroupVec)
+
+    p <- ggplot(data = plotdf, mapping = aes(x = "Content", y = ValueVec, fill = CNPVec)) +
+        geom_bar(stat = "identity", position = "stack", width = 1) +
+        coord_polar(theta = "y") +
+        labs(x = "", y = "", title = "") +
+        theme(axis.text = element_blank()) +
+        theme(axis.ticks = element_blank()) +
+        theme_bw() +
+        facet_grid(GroupVec ~ .)
+
+    pdf(paste0(savePath, "CNP fraction in Relapse.pdf"), height = 6, width = 8)
+    print(p)
+    dev.off()
 
     return(NULL)
 }
@@ -274,19 +300,15 @@ BoxPlotForCellular <- function(mat1, mat2, valueCol, savePath) {
 }
 
 ## KM curve For cellular pattern
-KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath) {
-    plotdf1 <- TransformIntoPlotMat(mat1, valueCol)
-    plotdf2 <- TransformIntoPlotMat(mat2, valueCol)
+KMForCNP <- function(df, cluster, savePath) {
+    cutpoint <- surv_cutpoint(data = df, time = "RFS_time", event = "RFS_status", variables = cluster)
+    cutpoint <- summary(cutpoint)$cutpoint
+    df[, 1] <- ifelse(df[, 1] >= cutpoint, "high", "low")
 
-    plotdf <- rbind(plotdf1, plotdf2)
-    plotdf <- subset(plotdf, Pattern == cluster)
-    plotdf$PatternLabel <- ifelse(plotdf$Abundance >= median(plotdf$Abundance), "High", "Low")
-
-    plotdf$Relapse <- as.numeric(plotdf$Relapse)
-
-    fit <- survfit(Surv(RelapseTime, Relapse) ~ PatternLabel, data = plotdf)
+    colnames(df) <- c("Abundance", "RFS_status", "RFS_time")
+    fit <- survfit(Surv(RFS_time, RFS_status) ~ Abundance, data = df)
     p <- ggsurvplot(fit,
-        data = plotdf,
+        data = df,
         linetype = c("solid", "solid"),
         surv.median.line = "hv", surv.scale = "percent",
         pval = T, risk.table = T,
@@ -296,7 +318,8 @@ KMForCellular <- function(mat1, mat2, valueCol, cluster, savePath) {
         xlab = "Recurrence time"
     )
 
-    pdf(paste0(savePath, "Cellular Neighborhood pattern Suvival analysis of ", cluster, ".pdf"), height = 6, width = 8)
+
+    pdf(savePath, width = 8, height = 6)
     print(p)
     dev.off()
 
@@ -553,6 +576,61 @@ PlotCertainTypeinPattern <- function(sce_, Col1, types1, Col2, groupCol, savePat
     return(NULL)
 }
 
+## Plot CNP on cell-level
+## get cell coordinate
+getCoordinate <- function(sce_) {
+    if (!"Position" %in% colnames(colData(sce_))) {
+        cat("There is not column named Position!", "\n")
+        return(NULL)
+    }
+
+    position <- sapply(sce_$Position, function(a) {
+        strsplit(a, ",")
+    })
+    names(position) <- NULL
+
+    x <- lapply(position, function(b) {
+        return(as.numeric(strsplit(b[1], "\\(")[[1]][2]))
+    })
+    y <- lapply(position, function(b) {
+        return(as.numeric(strsplit(b[2], "\\)")[[1]][1]))
+    })
+
+    x <- unlist(x)
+    y <- unlist(y)
+
+    return(list(x, y))
+}
+
+## plot celltypes on cell-level
+PlotCelltypes <- function(sce, ROI, TypeCol, SavePath) {
+    sce_ <- sce[, sce$ID == ROI]
+
+    coorList <- getCoordinate(sce_)
+
+    celltypes <- colData(sce_)[, TypeCol]
+
+    plotdf <- as.data.frame(matrix(data = NA, nrow = length(celltypes), ncol = 3))
+    colnames(plotdf) <- c("x", "y", "CNP")
+    plotdf["x"] <- coorList[[1]]
+    plotdf["y"] <- coorList[[2]]
+    plotdf["CNP"] <- celltypes
+
+    myPalette <- brewer.pal(12, "Set3")
+
+    p <- ggplot(plotdf, aes(x = x, y = y)) +
+        geom_point(aes(color = CNP), size = 1) +
+        scale_colour_manual(values = myPalette, drop = F) +
+        labs(title = paste0(ROI)) +
+        theme_test()
+
+    pdf(paste0(SavePath, "_CNP.pdf"), height = 6, width = 8)
+    print(p)
+    dev.off()
+
+    return(NULL)
+}
+
 ## Phenotype-associated cell label Boxplot
 BoxPlotForPhenoAssCell <- function(plotdf, savePath) {
     plotdf$Relapse <- ifelse(plotdf$Relapse == 0, "Non-Relapse", "Relapse")
@@ -696,6 +774,171 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
         ) # 图边距
 
     ggsave(p.vol, filename = filename)
+
+    return(NULL)
+}
+
+## Assign new label
+AssignNewlabel <- function(sce_, phenoLabel, ReclusterName, interstType, cutoffType) {
+    colData(sce_)[,phenoLabel] <- "Pheno_neg"
+    colData(sce_)[,phenoLabel][which(colData(sce_)[, ReclusterName] %in% interstType)] <- "Pheno_pos"
+
+    CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = FALSE)
+    if(cutoffType=="median"){Cutoff <- median(CountMat[,"Pheno_pos"])}
+    if(cutoffType=="mean"){Cutoff <- mean(CountMat[,"Pheno_pos"])}
+
+    RList <- list()
+    RList[["sce"]] <- sce_
+    RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[,"Pheno_pos"]>=Cutoff),])
+    RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[,"Pheno_pos"]<Cutoff),])
+
+    return(RList)
+}
+
+### get the results of permutation test
+getResult <- function(ResultPath, ROIs, celltypes, p_threshold = 0.05) {
+    ## Interaction
+    numtypes <- length(celltypes)
+
+    interDF <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
+    interDF <- as.data.frame(interDF)
+    rownames(interDF) <- celltypes
+    colnames(interDF) <- celltypes
+
+    numID <- length(ROIs)
+
+    for (ID in ROIs) {
+        filepathTemp <- paste0(ResultPath, ID, "/ClosePvalue/ClosePvalue.csv")
+        csvTemp <- read.csv(filepathTemp)
+        rownames(csvTemp) <- csvTemp[, 1]
+        csvTemp <- csvTemp[, -1]
+
+        csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
+
+        colname_ <- colnames(csvTemp)
+        rowname_ <- rownames(csvTemp)
+
+        for (i in 1:nrow(csvTemp)) {
+            for (j in 1:ncol(csvTemp)) {
+                if (csvTemp[i, j] == 1) {
+                    interDF[rowname_[i], colname_[j]] <- interDF[rowname_[i], colname_[j]] + 1
+                }
+            }
+        }
+    }
+    interDF <- round(interDF / numID,4)  
+
+    ## Avoideness
+    avoidDF <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
+    avoidDF <- as.data.frame(avoidDF)
+    rownames(avoidDF) <- celltypes
+    colnames(avoidDF) <- celltypes
+
+    for (ID in ROIs) {
+        filepathTemp <- paste0(ResultPath, ID, "/AvoidPvalue/AvoidPvalue.csv")
+        csvTemp <- read.csv(filepathTemp)
+        rownames(csvTemp) <- csvTemp[, 1]
+        csvTemp <- csvTemp[, -1]
+
+        csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
+
+        colname_ <- colnames(csvTemp)
+        rowname_ <- rownames(csvTemp)
+
+        for (i in 1:nrow(csvTemp)) {
+            for (j in 1:ncol(csvTemp)) {
+                if (csvTemp[i, j] == 1) {
+                    avoidDF[rowname_[i], colname_[j]] <- avoidDF[rowname_[i], colname_[j]] + 1
+                }
+            }
+        }
+    }
+
+    avoidDF <- round(avoidDF / numID,4)  
+
+    ## Merge
+    labelDF <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
+    labelDF <- as.data.frame(labelDF)
+    rownames(labelDF) <- celltypes
+    colnames(labelDF) <- celltypes
+
+    MergeDF <- labelDF
+
+    for (i in 1:nrow(labelDF)) {
+        for (j in 1:ncol(labelDF)) {
+            if (interDF[i, j] > avoidDF[i, j]) {
+                MergeDF[i, j] <- interDF[i, j]
+                labelDF[i, j] <- 1
+            } else {
+                MergeDF[i, j] <- avoidDF[i, j]
+                labelDF[i, j] <- -1
+            }
+        }
+    }
+
+    return(list("MergeDF" = MergeDF, "LabelDF" = labelDF))
+}
+
+## Double heatmap
+DoubleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, plot = "circle", savePath) {
+    DF1 <- MergeDF1 * labelDF1
+    DF2 <- MergeDF2 * labelDF2
+
+    plotdf <- matrix(data = 0, nrow = nrow(DF1) * ncol(DF1), ncol = 4)
+    plotdf <- as.data.frame(plotdf)
+
+    plotdf[,1] <- rep(rownames(DF1),times=ncol(DF1))
+    plotdf[,2] <- rep(colnames(DF1),each=nrow(DF1))
+    plotdf[,3] <- as.numeric(as.matrix(DF1))
+    plotdf[,4] <- as.numeric(as.matrix(DF2))
+    
+    colnames(plotdf) <- c("Celltype1","Celltype2","Interaction1","Interaction2")
+
+     if (plot == "heatmap") {
+         p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
+             geom_heat_tri(
+                 upper = Interaction1, lower = Interaction2,
+                 upper_name = c(group1), lower_name = c(group2),
+                 lower_colors = c("#075fd5", "white", "#fd6a78"),
+                 upper_colors = c("#075fd5", "white", "#fd6a78")
+             ) +
+             theme_bw() +
+             theme(axis.text.x = element_text(angle = 90, hjust = 1))
+     }
+    if (plot == "circle") {
+        p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
+            geom_heat_circle(
+                outside = Interaction2,
+                inside = Interaction1,
+                outside_colors = c("#075fd5", "white", "#fd6a78"),
+                inside_colors = c("#075fd5", "white", "#fd6a78")
+            ) +
+            theme_bw() +
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    }
+    if(plot == "groupheatmap"){
+        plotdf2 <- cbind(rep(plotdf[, 1], times = 2), rep(plotdf[, 2], times = 2), c(plotdf[, 3], plotdf[, 4]),rep(c(group1,group2),each=nrow(plotdf)))
+        plotdf2 <- as.data.frame(plotdf2)
+        plotdf2[, 3] <- as.numeric(plotdf2[, 3])
+        colnames(plotdf2) <- c("Celltype1","Celltype2","Interaction","Group")
+
+    p <- ggplot(plotdf2, aes(x = Celltype1, y = Celltype2)) +
+        geom_tile(aes(fill = Interaction)) +
+        scale_fill_gradient2(low="#0000ff", high="#ff0000", mid="#ffffff")+
+        theme_bw() +
+                theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+        facet_grid(.~Group)
+
+    pdf(savePath, height = 6, width = 12)
+    print(p)
+    dev.off()
+
+    return(NULL)
+    }
+
+    pdf(savePath, height = 6, width = 8)
+    print(p)
+    dev.off()
 
     return(NULL)
 }

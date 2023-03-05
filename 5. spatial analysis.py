@@ -200,7 +200,7 @@ for tissue in ["CT","TAT","IM"]:
         kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata_.uns[('spatial_count_knn_'+str(n_neighbors))])
 
         cluster_labels = list(map(str,kmeans.labels_))
-        cluster_labels = list(map(lambda orig_string: 'kmeans' + '_' + orig_string, cluster_labels))
+        cluster_labels = list(map(lambda orig_string: 'CNP' + '_' + orig_string, cluster_labels))
         adata_.obs[('kmeans_knn_'+str(n_neighbors))] = cluster_labels
 
     #### save the clustering result
