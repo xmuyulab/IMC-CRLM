@@ -115,7 +115,7 @@ savePath <- "/mnt/data/lyx/IMC/analysis/spatial/"
 ## remain Tissue associated Tumor
 sce <- sce[, sce$Tissue == "IM"]
 # sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
-scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor.csv")
+scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/spatial/cellular_neighbor_IM.csv")
 scimapResult <- scimapResult[, -1]
 
 colnames(scimapResult)
@@ -167,7 +167,7 @@ sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7,
 # sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
 
 ## Certain reclustering types in cellular pattern
-interstType <- c("9")
+interstType <- c("2")
 PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = interstType, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
 
 ## assign the new label
@@ -217,6 +217,25 @@ rm(list_)
 
 DoubleHeat(MergeDF1, labelDF1, group1 = "Mono_CD279 high", MergeDF2, labelDF2, group2 = "Mono_CD279 low", plot = "groupheatmap", savePath = paste0(savePath, "Mono_CD279 Interaction Heatmap.pdf"))
 
+### plot the cell subtype number different
+sce_Temp <- sce[, sce$ID %in% CD279high_ROI]
+CD279HighCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
+CD279HighCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
+
+sce_Temp <- sce[, sce$ID %in% CD279low_ROI]
+CD279lowCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
+CD279lowCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
+
+#### celltype
+AbundanceSwarmPlot(CD279HighCountMat1, CD279lowCountMat1, groupsName = c("high", "low"), celltype = "Mono_CD57", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+AbundanceSwarmPlot(CD279HighCountMat1, CD279lowCountMat1, groupsName = c("high", "low"), celltype = "Mono_CLEC9A", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+
+#### k-means
+AbundanceSwarmPlot(CD279HighCountMat2, CD279lowCountMat2, groupsName = c("high", "low"), celltype = "kmeans_7", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+
+#### survival
+SurvivalForPhenoAssoLabel(CD279HighCountMat2, CD279lowCountMat2, time = "RFS_time", status = "RFS_status", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+
 ### CD274 (PD-L1)
 CD274_Mono <- c("2")
 TempList <- AssignNewlabel(sce_, phenoLabel = "CD274_Mono", ReclusterName = ReclusterName, interstType = CD274_Mono, cutoffType = "mean")
@@ -237,3 +256,22 @@ labelDF2 <- list_[[2]]
 rm(list_)
 
 DoubleHeat(MergeDF1, labelDF1, group1 = "Mono_CD274 high", MergeDF2, labelDF2, group2 = "Mono_CD274 low", plot = "groupheatmap", savePath = paste0(savePath, "Mono_CD274 Interaction Heatmap.pdf"))
+
+### plot the cell subtype number different
+sce_Temp <- sce[, sce$ID %in% CD274high_ROI]
+CD274HighCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
+CD274HighCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
+
+sce_Temp <- sce[, sce$ID %in% CD274low_ROI]
+CD274lowCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
+CD274lowCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
+
+#### celltype
+AbundanceSwarmPlot(CD274HighCountMat1, CD274lowCountMat1, groupsName = c("high", "low"), celltype = "Mono_CD57", marker = "CD274", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+AbundanceSwarmPlot(CD274HighCountMat1, CD274lowCountMat1, groupsName = c("high", "low"), celltype = "Mono_CLEC9A", marker = "CD274", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+
+#### k-means
+AbundanceSwarmPlot(CD274HighCountMat2, CD274lowCountMat2, groupsName = c("high", "low"), celltype = "kmeans_7", marker = "CD274", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+
+#### survival
+SurvivalForPhenoAssoLabel(CD274HighCountMat2, CD274lowCountMat2, time = "RFS_time", status = "RFS_status", marker = "CD274", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
