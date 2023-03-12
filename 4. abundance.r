@@ -154,7 +154,7 @@ dim(countdf)
 head(countdf)
 
 xCol <- c(1, 21)
-celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Mono_Classic", "Mono_CD57", "SC_Vimentin", "TC_CAIX", "TC_TIGHT","TC_COLLAGEN")
+celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Mono_Classic", "Mono_CD57", "SC_Vimentin", "TC_CAIX", "TC_TIGHT","TC_CAIX","TC_COLLAGEN")
 AbunBoxDF <- abundanceBoxplotMat(countdf, celltypes2Plot, MetaCol = c("Tissue", "KRAS_mutation"), expCol = xCol)
 
 AbunBoxDF$KRAS_mutation <- as.factor(ifelse(AbunBoxDF$KRAS_mutation == 1, "KRAS Mutation", "WT"))

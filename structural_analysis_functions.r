@@ -454,7 +454,7 @@ PlotMarkerOnTSNE <- function(expDF, tsneDF, ReclusterName, savePath) {
             theme_classic() +
             facet_grid(Marker ~ group)
 
-        pdf(paste0(savePath, marker, " expression on tSNE reclustering.pdf"), height = 5, width = 8)
+        pdf(paste0(savePath, marker, " expression on tSNE reclustering.pdf"), height = 3, width = 8)
         print(p)
         dev.off()
     }
@@ -965,12 +965,12 @@ AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, groupsName, celltype,
 
     ## Swarm plot
     p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group)) +
-        geom_boxplot(show.legend = FALSE) +
-        geom_beeswarm(dodge.width = 0.8, shape = 21) +
+        geom_violin(show.legend = FALSE) +
+        geom_jitter(aes(fill = Group)) +
         theme_bw() +
         labs(x = NULL) +
         scale_color_manual(values = c("#648fff", "#d36b1c")) +
-        stat_compare_means(label.y = 0.7, method = "t.test")
+        stat_compare_means(label.y = (max(plotdf$Count) + 0.5), method = "t.test")
 
     pdf(paste0(savePath, "Swarmplot of ", celltype, " in ", marker, " group.pdf"), height = 3, width = 4)
     print(p)
@@ -1012,4 +1012,31 @@ SurvivalForPhenoAssoLabel <- function(AbundanceDF1, AbundanceDF2, time, status, 
     dev.off()
 
     return(NULL)
+}
+
+## take mean
+TakeMeans <- function(df, valuecol, groupcol, pidcol) {
+    PIDs <- names(table(df[, pidcol]))
+
+    PIDVec <- c()
+    ValueVec <- c()
+    GroupVec <- c()
+
+    for (i in 1:length(PIDs)) {
+        PIDVec <- c(PIDVec, PIDs[i])
+        DFtemp <- df[which(df[, pidcol] == PIDs[i]), ]
+
+        ValueVec <- c(ValueVec, mean(DFtemp[, valuecol]))
+        GroupVec <- c(GroupVec, DFtemp[1, groupcol])
+    }
+
+    returnDF <- cbind(ValueVec, PIDVec, GroupVec)
+    returnDF <- as.data.frame(returnDF)
+
+    colnames(returnDF) <- c("Abundance", "PID", "Group")
+    returnDF[, 1] <- as.numeric(returnDF[, 1])
+    returnDF[, 2] <- as.character(returnDF[, 2])
+    returnDF[, 3] <- as.character(returnDF[, 3])
+
+    return(returnDF)
 }

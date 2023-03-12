@@ -22,9 +22,9 @@ sce
 clinical <- read.csv("/mnt/data/lyx/IMC/clinical.csv")
 
 ## spatial interation
-
 GroupInfo <- GetGroupInfo(sce, clinical)
 celltypes <- names(table(sce$SubType))
+
 for (tissue in c("IM", "CT")) {
     ResultPath <- paste0("/mnt/data/lyx/IMC/analysis/spatial/permutation_", tissue, "/")
 
@@ -71,10 +71,38 @@ CompareCellularPattern(sce, sep = "KRAS_mutation", countcol = "kmeans_knn_20", n
 CNP_countsDF <- GetAbundance(sce, countcol = "kmeans_knn_20", is.fraction = F, is.reuturnMeans = T)
 CNPFraction(CNP_countsDF, groupBy = "KRAS_mutation", xCol = c(1, 10), savePath = paste0(savePath, "knn20_celluarPat/"))
 
-## Re-clustering
-rownames(sce)
-metaMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27")
-ReMajorType <- c("Tumor")
-ReclusterName <- "Tumor"
+## seperate ROIs into TC_CA9 high and low groups
+clinicalFeatures <- c("Tissue", "RFS_status", "RFS_time", "KRAS_mutation")
+CA9_countsDF <- GetAbundance(sce, countcol = "SubType", is.fraction = T, is.reuturnMeans = F)
+CA9_countsDF <- CA9_countsDF[,c("TC_CAIX","PID","Tissue","RFS_status","RFS_time","KRAS_mutation")]
 
-sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath)
+### grouping 
+mean_ <- mean(CA9_countsDF[,1])
+CA9_countsDF$CA9Label <- ifelse(CA9_countsDF[, 1] > mean_, "High", "Low")
+
+tissue <- "IM"
+celltypes <- names(table(sce$SubType))
+ResultPath <- paste0("/mnt/data/lyx/IMC/analysis/spatial/permutation_", tissue, "/")
+
+for (group in c("High", "Low")) {
+
+    CA9_countsDFTemp <- CA9_countsDF[which(CA9_countsDF[,"CA9Label"]==group),]
+
+    ## Get ROIs
+    ROI_KRASMut <- rownames(CA9_countsDFTemp[which(CA9_countsDFTemp$KRAS_mutation==1),])
+    ROI_KRASWT <- rownames(CA9_countsDFTemp[which(CA9_countsDFTemp$KRAS_mutation==0),])
+
+    ### KRAS mutation
+    list_ <- getResult(ResultPath, ROIs = ROI_KRASMut, celltypes)
+    MergeDF1 <- list_[[1]]
+    labelDF1 <- list_[[2]]
+    rm(list_)
+
+    ### WT
+    list_ <- getResult(ResultPath, ROIs = ROI_KRASWT, celltypes)
+    MergeDF2 <- list_[[1]]
+    labelDF2 <- list_[[2]]
+    rm(list_)
+
+    DoubleHeat(MergeDF1, labelDF1, group1 = "KRAS Mut", MergeDF2, labelDF2, group2 = "WT", plot = "circle", savePath = paste0(savePath, "KRAS_spatial_", tissue, " of CA9-",group,".pdf"))
+}

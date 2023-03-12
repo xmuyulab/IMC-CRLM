@@ -163,12 +163,12 @@ metaMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1"
 ReMajorType <- c("Monocyte")
 ReclusterName <- "Monocyte"
 
-sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath)
+sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
 # sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
 
 ## Certain reclustering types in cellular pattern
 interstType <- c("2")
-PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = interstType, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath)
+PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = interstType, Col2 = "kmeans_knn_20", groupCol = "RFS_status", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
 
 ## assign the new label
 if (F) {
