@@ -3,7 +3,7 @@ library(ggplot2)
 source("/home/lyx/project/IMC/abundance_functions.r")
 
 ## load data
-#clusterResult <- read.csv("/mnt/data/lyx/IMC/clustering/qc5_norm_asin_Idenmarke_flowsom_pheno.csv")
+# clusterResult <- read.csv("/mnt/data/lyx/IMC/clustering/qc5_norm_asin_Idenmarke_flowsom_pheno.csv")
 clusterResult <- readRDS("/mnt/data/lyx/IMC/analysis/clustering/annotate_allcells.rds")
 
 table(clusterResult$filelist)
@@ -57,7 +57,8 @@ sce <- SCE_Transform(clusterResult, assay_col = c(1, 35), cellmeta_col = c(36, 4
 saveRDS(sce, paste0("/mnt/data/lyx/IMC/analysis/allsce.rds"))
 
 sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
-
+sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "TAT" | sce$Tissue == "CT"]
+length(names(table(sce$PID)))
 ## plot cell marker expression value distribution
 savePath <- "/mnt/data/lyx/IMC/analysis/abundance/"
 table(sce$Batch)
@@ -115,7 +116,7 @@ for (tissue in c("IM", "CT", "TAT")) {
 
 
 ## Abundance Boxplot of relapse
-clinicalFeatures <- c("Tissue","RFS_status")
+clinicalFeatures <- c("Tissue", "RFS_status")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 
 dim(countdf)
@@ -133,10 +134,10 @@ p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = RFS_status)) +
     scale_x_discrete(name = "Cell Population") +
     theme_bw() +
     theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      text = element_text(size = 12),
-      axis.title = element_text(face = "bold"),
-      axis.text.x = element_text(size = 11, angle = 90)
+        plot.title = element_text(size = 14, face = "bold"),
+        text = element_text(size = 12),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_text(size = 11, angle = 90)
     ) +
     facet_wrap(~Celltype, ncol = 3) +
     scale_fill_lancet() +
@@ -147,14 +148,14 @@ print(p)
 dev.off()
 
 ## Abundance Boxplot of KRAS mutation
-clinicalFeatures <- c("Tissue","KRAS_mutation")
+clinicalFeatures <- c("Tissue", "KRAS_mutation")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 
 dim(countdf)
 head(countdf)
 
 xCol <- c(1, 21)
-celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Mono_Classic", "Mono_CD57", "SC_Vimentin", "TC_CAIX", "TC_TIGHT","TC_CAIX","TC_COLLAGEN")
+celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Mono_Classic", "Mono_CD57", "SC_Vimentin", "TC_CAIX", "TC_TIGHT", "TC_CAIX", "TC_COLLAGEN")
 AbunBoxDF <- abundanceBoxplotMat(countdf, celltypes2Plot, MetaCol = c("Tissue", "KRAS_mutation"), expCol = xCol)
 
 AbunBoxDF$KRAS_mutation <- as.factor(ifelse(AbunBoxDF$KRAS_mutation == 1, "KRAS Mutation", "WT"))
@@ -165,10 +166,10 @@ p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = KRAS_mutation)) +
     scale_x_discrete(name = "Cell Population") +
     theme_bw() +
     theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      text = element_text(size = 12),
-      axis.title = element_text(face = "bold"),
-      axis.text.x = element_text(size = 11, angle = 90)
+        plot.title = element_text(size = 14, face = "bold"),
+        text = element_text(size = 12),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_text(size = 11, angle = 90)
     ) +
     facet_wrap(~Celltype, ncol = 3) +
     scale_fill_lancet() +
@@ -180,34 +181,34 @@ dev.off()
 
 
 ## KM curve
-clinicalFeatures <- c("Tissue","RFS_time","RFS_status")
+clinicalFeatures <- c("Tissue", "RFS_time", "RFS_status")
 celltypes2Plot <- c("DPT", "B", "Mono_CLEC9A", "Mono_Classic", "Mono_CD57", "Macro_Multi", "Macro_CD11b", "SC_Vimentin", "TC_Ki67", "TC_TIGHT")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 for (tissue in c("IM", "CT", "TAT")) {
     plotdf <- MergeCountsofROI(countdf, tissue = tissue, expCol = xCol, scale = F)
 
     for (feature in clinicalFeatures) {
-    plotdf[, feature] <- clinical[match(rownames(plotdf), clinical$PID), feature]
-  }
+        plotdf[, feature] <- clinical[match(rownames(plotdf), clinical$PID), feature]
+    }
 
     for (celltype in celltypes2Plot) {
-        KMVisualize(plotdf, celltype, cutoff = "best", savePath = paste0(savePath, "KM/", tissue, "/",tissue, "_", celltype, "_KMCurve.pdf"))
+        KMVisualize(plotdf, celltype, cutoff = "best", savePath = paste0(savePath, "KM/", tissue, "/", tissue, "_", celltype, "_KMCurve.pdf"))
     }
 }
 
 ## meta analysis
-if(F){
+if (F) {
     features <- c(
-    "zs_rec_riskmodel", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
-    "CRLM_number", "CRLM_size", "Live_involvement_num", "Pathology", "Differential_grad", "T_grade"
-)
-IM_plotdf <- MergeCountsofROI(countdf, tissue = "TAT", expCol = xCol, scale = T)
-abundanceMetaAnalysis(IM_plotdf, celltypes2Plot, clinical, features, savePath)
+        "zs_rec_riskmodel", "fong_score", "Age", "Gender", "KRAS_mutation", "BRAF_mutation", "mTBS",
+        "CRLM_number", "CRLM_size", "Live_involvement_num", "Pathology", "Differential_grad", "T_grade"
+    )
+    IM_plotdf <- MergeCountsofROI(countdf, tissue = "TAT", expCol = xCol, scale = T)
+    abundanceMetaAnalysis(IM_plotdf, celltypes2Plot, clinical, features, savePath)
 }
 
 ## correlation analysis
-for(tissut in c("IM", "CT")){
+for (tissut in c("IM", "CT")) {
     plotdf <- subset(countdf, Tissue == tissut)
-plotdf <- plotdf[, c(xCol[1]:xCol[2])]
-CorrelationAnalysis(plotdf, savePath = paste0(savePath, tissut,"_abundance_correlation.pdf"))
+    plotdf <- plotdf[, c(xCol[1]:xCol[2])]
+    CorrelationAnalysis(plotdf, savePath = paste0(savePath, tissut, "_abundance_correlation.pdf"))
 }

@@ -780,24 +780,41 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
 }
 
 ## Assign new label
-AssignNewlabel <- function(sce_, phenoLabel, ReclusterName, interstType, cutoffType) {
+AssignNewlabel <- function(sce_, phenoLabel, ReclusterName, interstType, cutoffType, is.reuturnMeans = FALSE) {
     colData(sce_)[, phenoLabel] <- "Pheno_neg"
     colData(sce_)[, phenoLabel][which(colData(sce_)[, ReclusterName] %in% interstType)] <- "Pheno_pos"
 
-    CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = FALSE)
-    if (cutoffType == "median") {
-        Cutoff <- median(CountMat[, "Pheno_pos"])
-    }
-    if (cutoffType == "mean") {
-        Cutoff <- mean(CountMat[, "Pheno_pos"])
-    }
+    if (!is.reuturnMeans) {
+        CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = FALSE)
+        if (cutoffType == "median") {
+            Cutoff <- median(CountMat[, "Pheno_pos"])
+        }
+        if (cutoffType == "mean") {
+            Cutoff <- mean(CountMat[, "Pheno_pos"])
+        }
 
-    RList <- list()
-    RList[["sce"]] <- sce_
-    RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
-    RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
+        RList <- list()
+        RList[["sce"]] <- sce_
+        RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
+        RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
 
-    return(RList)
+        return(RList)
+    }
+    else {
+       CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = is.reuturnMeans)
+        if (cutoffType == "median") {
+            Cutoff <- median(CountMat[, "Pheno_pos"])
+        }
+        if (cutoffType == "mean") {
+            Cutoff <- mean(CountMat[, "Pheno_pos"])
+        }
+
+        RList <- list()
+        RList[["high_PID"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
+        RList[["low_PID"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
+
+        return(RList)
+    }
 }
 
 ### get the results of permutation test
@@ -1007,7 +1024,7 @@ SurvivalForPhenoAssoLabel <- function(AbundanceDF1, AbundanceDF2, time, status, 
         xlab = "Recurrence time"
     )
 
-    pdf(paste0(savePath, "Suvival analysis for phenotype-associated ROI of ", marker, ".pdf"), height = 6, width = 8)
+    pdf(paste0(savePath, "Suvival analysis for phenotype-associated ROI of ", marker, "_1.pdf"), height = 6, width = 8)
     print(p)
     dev.off()
 

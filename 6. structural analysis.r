@@ -159,11 +159,22 @@ for (ROI in ROIs) {
 ## Recluster
 ### clutering via metabolize molecular
 rownames(sce)
-metaMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27")
+## version 1
+reclusMarkers <- c("Ki67", "VEGF", "CAIX", "HK2", "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27")
+
+## version2
+if (F) {
+    reclusMarkers <- c(
+        "PRPS1", "FASN", "GLUT1", "HK2", "Ki67", ## Cell Growth and Division
+        "VEGF", "CAIX", ## Hypoxia
+        "CD279", "CD274", "CD366", "TIGHT", ## Immune-checkpoint
+        "CD27", "CD80", "CD127" ## Immune-activation
+    )
+}
 ReMajorType <- c("Monocyte")
 ReclusterName <- "Monocyte"
 
-sce_ <- Reclustering(sce, metaMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
+sce_ <- Reclustering(sce, reclusMarkers, ReMajorType, ReclusterName, ncluster = 7, savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
 # sce_ <- readRDS("/home/lyx/project/IMC/test_sce.rds")
 
 ## Certain reclustering types in cellular pattern
@@ -185,7 +196,7 @@ if (F) {
 
 ## plot the differential expression genes
 sce_ <- sce_[, sce_$MajorType == ReMajorType]
-mat <- as.data.frame(t(assay(sce_)[metaMarkers, ]))
+mat <- as.data.frame(t(assay(sce_)[reclusMarkers, ]))
 mat$phenoLabel <- ifelse(sce_$phenoLabel == "Pheno_minus", 0, 1)
 FCDF <- FCandPvalueCal(mat, xCol = c(1, 11), yCol = 12, need.sample = TRUE)
 VolcanoPlot(FCDF, pthreshold = 0.01, fcthreshold = 3, feature = "Phenotype-Associated cells", filename = paste0(savePath, "Phenotype-associated differential markers in ", ReMajorType, ".pdf"))
@@ -218,13 +229,13 @@ rm(list_)
 DoubleHeat(MergeDF1, labelDF1, group1 = "Mono_CD279 high", MergeDF2, labelDF2, group2 = "Mono_CD279 low", plot = "groupheatmap", savePath = paste0(savePath, "Mono_CD279 Interaction Heatmap.pdf"))
 
 ### plot the cell subtype number different
-sce_Temp <- sce[, sce$ID %in% CD279high_ROI]
-CD279HighCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
-CD279HighCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
+sce_Temp1 <- sce[, sce$ID %in% CD279high_ROI]
+CD279HighCountMat1 <- GetAbundance(sce_Temp1, countcol = "SubType", is.fraction = T)
+CD279HighCountMat2 <- GetAbundance(sce_Temp1, countcol = "kmeans_knn_20", is.fraction = T)
 
-sce_Temp <- sce[, sce$ID %in% CD279low_ROI]
-CD279lowCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
-CD279lowCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
+sce_Temp2 <- sce[, sce$ID %in% CD279low_ROI]
+CD279lowCountMat1 <- GetAbundance(sce_Temp2, countcol = "SubType", is.fraction = T)
+CD279lowCountMat2 <- GetAbundance(sce_Temp2, countcol = "kmeans_knn_20", is.fraction = T)
 
 #### celltype
 AbundanceSwarmPlot(CD279HighCountMat1, CD279lowCountMat1, groupsName = c("high", "low"), celltype = "Mono_CD57", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
@@ -234,6 +245,12 @@ AbundanceSwarmPlot(CD279HighCountMat1, CD279lowCountMat1, groupsName = c("high",
 AbundanceSwarmPlot(CD279HighCountMat2, CD279lowCountMat2, groupsName = c("high", "low"), celltype = "kmeans_7", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
 
 #### survival
+TempList <- AssignNewlabel(sce_, phenoLabel = "CD279_Mono", ReclusterName = ReclusterName, interstType = CD279_Mono, cutoffType = "mean", is.reuturnMeans = T)
+CD279CountMat <- GetAbundance(sce, countcol = "kmeans_knn_20", is.fraction = T, is.reuturnMeans = T)
+
+CD279HighCountMat2 <- CD279CountMat[TempList[[1]], ]
+CD279lowCountMat2 <- CD279CountMat[TempList[[2]], ]
+
 SurvivalForPhenoAssoLabel(CD279HighCountMat2, CD279lowCountMat2, time = "RFS_time", status = "RFS_status", marker = "CD279", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
 
 ### CD274 (PD-L1)
@@ -258,11 +275,11 @@ rm(list_)
 DoubleHeat(MergeDF1, labelDF1, group1 = "Mono_CD274 high", MergeDF2, labelDF2, group2 = "Mono_CD274 low", plot = "groupheatmap", savePath = paste0(savePath, "Mono_CD274 Interaction Heatmap.pdf"))
 
 ### plot the cell subtype number different
-sce_Temp <- sce[, sce$ID %in% CD274high_ROI]
+sce_Temp1 <- sce[, sce$ID %in% CD274high_ROI]
 CD274HighCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
 CD274HighCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
 
-sce_Temp <- sce[, sce$ID %in% CD274low_ROI]
+sce_Temp2 <- sce[, sce$ID %in% CD274low_ROI]
 CD274lowCountMat1 <- GetAbundance(sce_Temp, countcol = "SubType", is.fraction = T)
 CD274lowCountMat2 <- GetAbundance(sce_Temp, countcol = "kmeans_knn_20", is.fraction = T)
 
@@ -274,4 +291,10 @@ AbundanceSwarmPlot(CD274HighCountMat1, CD274lowCountMat1, groupsName = c("high",
 AbundanceSwarmPlot(CD274HighCountMat2, CD274lowCountMat2, groupsName = c("high", "low"), celltype = "kmeans_7", marker = "CD274", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))
 
 #### survival
+TempList <- AssignNewlabel(sce_, phenoLabel = "CD274_Mono", ReclusterName = ReclusterName, interstType = CD274_Mono, cutoffType = "mean", is.reuturnMeans = T)
+CD274CountMat <- GetAbundance(sce, countcol = "kmeans_knn_20", is.fraction = T, is.reuturnMeans = T)
+
+CD274HighCountMat2 <- CD274CountMat[TempList[[1]], ]
+CD274lowCountMat2 <- CD274CountMat[TempList[[2]], ]
+
 SurvivalForPhenoAssoLabel(CD274HighCountMat2, CD274lowCountMat2, time = "RFS_time", status = "RFS_status", marker = "CD274", savePath = paste0(savePath, "knn20_celluarPat/reclustering/"))

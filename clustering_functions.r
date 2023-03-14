@@ -65,15 +65,11 @@ load_Marker <- function(panel) {
   allMarker <- panel[panel$full == 1, ]$marker
   allMarker <- allMarker[!is.na(allMarker)]
 
-  type20Marker <- panel[panel$type20 == 1, ]$marker
-  type20Marker <- type20Marker[!is.na(type20Marker)]
-
   IdMarker <- panel[panel$Identification == 1, ]$marker
   IdMarker <- IdMarker[!is.na(IdMarker)]
 
   MarkerList <- list()
   MarkerList[["All_Marker"]] <- allMarker
-  MarkerList[["Top20_Marker"]] <- type20Marker
   MarkerList[["Iden_Marker"]] <- IdMarker
 
   return(MarkerList)
