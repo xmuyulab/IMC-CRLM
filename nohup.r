@@ -1,26 +1,153 @@
+library(RColorBrewer)
+library(pheatmap)
+library(ComplexHeatmap)
+library(ggplot2)
+library(cowplot)
+library(ggrepel)
+library(dplyr)
+library(ggpubr)
+library(stringr)
+library(reshape2)
 library(SingleCellExperiment)
 
-source("./spatial_analysis_functions.r")
+source("/home/lyx/project/IMC/clustering_functions.r")
+source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
 
-## Permutation Result Analysis
-ResultPath <- "/mnt/data/lyx/IMC/analysis/spatial/permutation/"
-FigurePath <- "/mnt/data/lyx/IMC/analysis/spatial/"
+savePath <- "/mnt/data/lyx/IMC/analysis/clustering/"
 
-## Visualize
-sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
+## Load Marker
+cat("Start Loading Marker", "\n")
+panel <- read.csv("/mnt/data/lyx/IMC/IMC_CRC_panel_v2.csv", stringsAsFactors = FALSE)
+MarkerList <- load_Marker(panel)
 
-tissue <- "IM"
 
-sce_ <- sce[, sce$Tissue == tissue]
 
-ROIs <- names(table(sce_$ID))
+## Major
+if (F) {
+    ## Loading protein expression matrix and meta data
+    raw_csv_dir <- "/mnt/data/lyx/IMC/IMCell_Output/denoise_result"
+    meta_csv_dir <- "/mnt/data/lyx/IMC/IMC_CRC_QC.csv"
 
-CellMaskPath <- "/mnt/data/lyx/IMC/unet/predictionProbability/ori_cellmask/"
-ChannelPath <- "/mnt/data/lyx/IMC/IMCell_Output/save_img/raw/"
+    cat("Start Loading Raw data", "\n")
+    total.res2.qc <- load_RawData(raw_csv_dir, meta_csv_dir)
+    print(dim(total.res2.qc))
 
-channels2plot <- c("CLEC9A", "CD57", "FoxP3")
-celltypes2plot <- c("Mono_CLEC9A", "Mono_Multi")
+    ## data normalization
+    colnames(total.res2.qc)[which(colnames(total.res2.qc) == "sample")] <- "filelist"
 
-for (ROI in ROIs) {
-    VisTypeMaskChannel(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath, ChannelPath, SavePath = paste0("/mnt/data/lyx/IMC/analysis/spatial/imgOutput/", tissue, "/"))
+    cat("Start Normalizing Data", "\n")
+    total.res2.qc.norm <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = FALSE, is.Batch = F, norm_method = "0-1")
+    total.res2.qc.norm.asin <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = TRUE, is.Batch = F, norm_method = "0-1")
+
+    saveRDS(total.res2.qc, paste0(savePath, "total.res2.qc.rds"))
+    saveRDS(total.res2.qc.norm, paste0(savePath, "total.res2.qc.norm.rds"))
+    saveRDS(total.res2.qc.norm.asin, paste0(savePath, "total.res2.qc.norm.asin.rds"))
+
+    cat("Start Loading Data", "\n")
+    total.res2.qc <- readRDS(paste0(savePath, "total.res2.qc.rds"))
+    total.res2.qc.norm <- readRDS(paste0(savePath, "total.res2.qc.norm.rds"))
+    total.res2.qc.norm.asin <- readRDS(paste0(savePath, "total.res2.qc.norm.asin.rds"))
+    cat("Loading Data done", "\n")
+
+    markers <- MarkerList[["Major_Marker"]]
+    print((markers))
+
+    ### paralle
+    if (T) {
+        library(parallel)
+
+        perFunc <- function(list_) {
+            source("/home/lyx/project/IMC/clustering_functions.r")
+            source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
+            total.res2.qc <- list_[[1]]
+            total.res2.qc.norm <- list_[[2]]
+            total.res2.qc.norm.asin <- list_[[3]]
+            markers <- list_[[4]]
+            Type <- list_[[5]]
+            savePath <- list_[[6]]
+            phenok <- list_[[7]]
+
+            cat("Performing phenograph clustering with phenok = ", phenok, "\n")
+            ## norm
+            norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, markers,
+                phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok, using.kmenas = T
+            )
+            # saveRDS(norm_exp, paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".rds"))
+            pdf(paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+            plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+            dev.off()
+
+            return(NULL)
+        }
+        phenoks <- c(30, 35, 25, 40, 45)
+        Type <- "Major"
+        targets <- lapply(phenoks, FUN = function(x) {
+            return(list(total.res2.qc, total.res2.qc.norm, total.res2.qc.norm.asin, markers, Type, savePath, x))
+        })
+        cl <- makeCluster(32)
+        results <- parLapply(cl, targets, perFunc)
+        stopCluster(cl)
+    }
+}
+
+## Minor
+if (T) {
+    cat("Start Loading Data", "\n")
+    total.res2.qc <- readRDS(paste0(savePath, "total.res2.qc.rds"))
+    total.res2.qc.norm <- readRDS(paste0(savePath, "total.res2.qc.norm.rds"))
+    total.res2.qc.norm.asin <- readRDS(paste0(savePath, "total.res2.qc.norm.asin.rds"))
+
+    ## Minor clustering
+    cat("Loading Major annotation", "\n")
+    bestnorm_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Major_qc5_norm_Idenmarker_flowsom_pheno_k25.rds"
+    bestnorm_exp <- readRDS(bestnorm_expPath)
+
+    ### paralle
+    if (T) {
+        library(parallel)
+
+        perFunc <- function(list_) {
+            source("/home/lyx/project/IMC/clustering_functions.r")
+            source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
+            total.res2.qc <- list_[[1]]
+            total.res2.qc.norm <- list_[[2]]
+            total.res2.qc.norm.asin <- list_[[3]]
+            markers <- list_[[4]]
+            Type <- list_[[5]]
+            savePath <- list_[[6]]
+            phenok <- list_[[7]]
+
+            cat("Performing phenograph clustering with phenok = ", phenok, "\n")
+            ## norm
+            norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, markers,
+                phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok, using.kmenas = T
+            )
+            pdf(paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+            plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+            dev.off()
+
+            return(NULL)
+        }
+
+        ## form targets to multiple precess
+        cat("Form the multi-process targets", "\n")
+        phenoks <- c(20, 15, 25, 30)
+        Type <- c("Lymphocyte", "Myeloid", "Stromal", "Tumor")
+
+        targets <- list()
+        z <- 1
+        for (i in 1:length(Type)) {
+            idx <- bestnorm_exp$MajorType %in% Type[i]
+            for (j in phenoks) {
+                cat("Precessing ", Type[i], " of k=", j, "\n")
+                targets[[z]] <- list(bestnorm_exp[idx, ], bestnorm_exp[idx, ], NULL, MarkerList[[i + 2]], Type[i], savePath, j)
+                z <- z + 1
+            }
+        }
+        cat("Form the multi-process targets done.", "\n")
+        cl <- makeCluster(32)
+        cat("Start multi-process.", "\n")
+        results <- parLapply(cl, targets, perFunc)
+        stopCluster(cl)
+    }
 }

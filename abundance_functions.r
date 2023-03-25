@@ -11,6 +11,8 @@ library(SingleCellExperiment)
 library(ggcor)
 library(ggridges)
 library(RColorBrewer)
+library(ggpointdensity)
+library(viridis)
 
 ## Plot the marker distribution from different batch
 PlotMarkerExpDistribution <- function(sce, savePath) {
@@ -66,9 +68,7 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatur
   ## ROI, major celltype and cell subtype names and other clinical information
   ROIs <- names(table(cellMeta$ID))
 
-  # MajorTypes <- names(table(cellMeta$MajorType))
   SubTypes <- names(table(cellMeta$SubType))
-  # alltypes <- unique(c(MajorTypes, SubTypes))
   alltypes <- unique(c(SubTypes))
 
   CellCountMat <- matrix(data = NA, nrow = length(ROIs), ncol = (length(alltypes)))
@@ -176,53 +176,75 @@ summaryClinical <- function(DF) {
   features <- names(table(DF$Feature))
   for (feature in features) {
     if (feature == "Prognosis") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Worse Prog versus Better"
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Worse versus Good"
     }
     if (feature == "RFS_status") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Relapse versus Non-relapse"
     }
+    if (feature == "RFS_time_12") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "RFS_time>=12 versus <12"
+    }
     if (feature == "Recurrence_site") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Extrahepatic relapse versus Liver"
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Extrahepatic relapse versus Liver relapse"
     }
-    if (feature == "fong_score") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-FongScore versus Low-FongScore"
+    if (feature == "zs_rec_riskmodel") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-risk versus Low-risk"
     }
-    if (feature == "Age") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- ">=60 versus <60"
+    if (feature == "fong_score_2") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "FongScore>=2 versus <2"
+    }
+    if (feature == "fong_score_4") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "FongScore>=4 versus <4"
     }
     if (feature == "Gender") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Female versus Male"
     }
+    if (feature == "Age_60") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Age>=60 versus <60"
+    }
     if (feature == "KRAS_mutation") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "KRAS Mut versus WT"
+    }
+    if (feature == "NAS_mutation") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "NAS Mut versus WT"
     }
     if (feature == "BRAF_mutation") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "BRAF Mut versus WT"
     }
-    if (feature == "mTBS") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-mTBS versus Low-mTBS"
+    if (feature == "TBS_3") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "TBS>=3 versus <3"
     }
-    if (feature == "CRLM_number") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-CRLMNUM versus Low-CRLMNUM"
+    if (feature == "TBS_8") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "TBS>=8 versus <8"
     }
-    if (feature == "CRLM_size") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-CRLMSize versus Low-CRLMSize"
+    if (feature == "CRLM_number_4") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "CRLM_number>=4 versus <4"
     }
-    if (feature == "Live_involvement_num") {
+    if (feature == "CRLM_size_3") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "CRLM_size>=3 versus <3"
+    }
+    if (feature == "CRLM_size_5") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "CRLM_size>=5 versus <5"
+    }
+    if (feature == "Liver_involvement_num") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Liver involvement 2 versus involvement 1"
     }
-    if (feature == "CEA") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Abnormal CEA versus Normal"
+    if (feature == "CEA_5") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "CEA>=5 versus CEA<5"
     }
-    if (feature == "CA199") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Abnormal CA199 versus Normal"
+    if (feature == "CA199_37") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "CA199>=37 versus <37"
     }
     if (feature == "Pathology") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Mucinous versus Adenocarcinoma"
     }
-    if (feature == "Lymph_grade") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "N-positive versus N-negative"
+    if (feature == "Differential_grade") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Moderately differentiate versus Lowly"
     }
+    if (feature == "Lymph_positive") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Lymphonode-positive versus negative"
+    }
+
   }
   return(DF)
 }
@@ -329,38 +351,35 @@ MultiCliDotplot <- function(plotdf, tissue, savePath) {
 ## abundance boxplot
 abundanceBoxplotMat <- function(plotdf, celltypes2Plot = NULL, MetaCol, expCol, filename) {
   plotdf2 <- CountMat2Plotdf(plotdf, MetaCol, expCol)
-  
-  if(is.null(celltypes2Plot)){
+
+  if (is.null(celltypes2Plot)) {
     return(plotdf2)
-  }
-  else {
-       plotdf3 <- plotdf2[plotdf2$Celltype %in% celltypes2Plot, ]
+  } else {
+    plotdf3 <- plotdf2[plotdf2$Celltype %in% celltypes2Plot, ]
     return(plotdf3)
-
   }
-
 }
 
 ## Convert count matrix into plot dataframe
 CountMat2Plotdf <- function(plotdf, MetaCol, expCol) {
   ### matrix transform
   abundanceVec <- as.numeric(as.matrix(plotdf[, expCol[1]:expCol[2]]))
-  cellsubtypeVec <- rep(colnames(plotdf[, expCol[1]:expCol[2]]),each=nrow(plotdf))
+  cellsubtypeVec <- rep(colnames(plotdf[, expCol[1]:expCol[2]]), each = nrow(plotdf))
   metaList <- list()
-  for(i in 1:length(MetaCol)){
-    metaList[[MetaCol[i]]] <- rep(as.character(plotdf[,MetaCol[i]]),times = ncol(plotdf))
+  for (i in 1:length(MetaCol)) {
+    metaList[[MetaCol[i]]] <- rep(as.character(plotdf[, MetaCol[i]]), times = ncol(plotdf))
   }
 
   plotdf2 <- cbind(abundanceVec, cellsubtypeVec, metaList[[1]])
   plotdf2 <- as.data.frame(plotdf2)
   plotdf2[, 1] <- as.numeric(plotdf2[, 1])
-  
-  for(i in 2:length(metaList)){
+
+  for (i in 2:length(metaList)) {
     plotdf2 <- cbind(plotdf2, metaList[[i]])
-    plotdf2[,i] <- as.factor(plotdf2[,i])
+    plotdf2[, i] <- as.factor(plotdf2[, i])
   }
-  
-  colnames(plotdf2) <- c("Abundance", "Celltype",MetaCol)
+
+  colnames(plotdf2) <- c("Abundance", "Celltype", MetaCol)
 
   return(plotdf2)
 }
@@ -385,13 +404,22 @@ MultipleUniCOX <- function(df) {
   result <- matrix(data = NA, nrow = 0, ncol = 6)
   result <- as.data.frame(result)
 
+    colnames(df) <- sapply(colnames(df),function(x){
+    sub(pattern = "\\+",replacement = "",x)
+  })
+colnames(df) <- sapply(colnames(df), function(x) {
+  sub(pattern = " ", replacement = "_", x)
+})
+
   features <- colnames(df)[1:(ncol(df) - 2)]
   cat("The features in multi-cox are: ", features, "\n")
+
+  features <- features[-(match(c("RFS_time",'RFS_status'),features ))]
 
   univ_formulas <- sapply(
     features,
     function(x) {
-      as.formula(paste("Surv(RFS_time, RFS_status)~", x))
+      as.formula(paste0("Surv(RFS_time, RFS_status)~", x))
     }
   )
 
@@ -424,39 +452,24 @@ MultipleUniCOX <- function(df) {
   return(result)
 }
 
-abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, savePath) {
+abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, tissue, savePath) {
   ## PIDs
   plotdf <- as.data.frame(plotdf)
   plotdf$PID <- rownames(plotdf)
 
-  clinical2 <- clinical[match(plotdf$PID, clinical$PID), features]
+  features_ <- c("PID",features)
 
-  clinical_features <- colnames(clinical2)
+  clinical2 <- clinical[match(plotdf$PID, clinical$PID), features_]
+
+  clinical_features <- features
   print("Clinical Features: ")
   print(clinical_features)
 
   rownames(clinical2) <- c(1:nrow(clinical2))
 
   ## bind more clinical information
-  plotdf$zs_rec_riskmodel <- clinical2$zs_rec_riskmodel
-  plotdf$fong_score <- clinical2$fong_score
-  plotdf$Gender <- clinical2$Gender
-  plotdf$Age <- clinical2$Age
-  plotdf$KRAS_mutation <- clinical2$KRAS_mutation
-  plotdf$BRAF_mutation <- clinical2$BRAF_mutation
-  plotdf$mTBS <- clinical2$mTBS
-  plotdf$CRLM_number <- clinical2$CRLM_number
-  plotdf$CRLM_size <- clinical2$CRLM_size
-  plotdf$Live_involvement_num <- clinical2$Live_involvement_num
-  plotdf$Pathology <- clinical2$Pathology
-  plotdf$Differential_grad <- clinical2$Differential_grad
-  plotdf$T_grade <- clinical2$T_grade
-  plotdf$RFS_time <- clinical[match(plotdf$PID, clinical$PID), "RFS_time"]
-  plotdf$RFS_status <- clinical[match(plotdf$PID, clinical$PID), "RFS_status"]
-
-  # cat("Number NA is:", table(is.na(plotdf)), "\n")
-
-  plotdf <- plotdf[, c(celltypes2Plot, features, "RFS_time", "RFS_status")]
+  plotdf <- dplyr::left_join(plotdf,clinical2,by='PID')
+  plotdf <- plotdf[, c(celltypes2Plot, features)]
 
   result <- MultipleUniCOX(plotdf)
 
@@ -531,7 +544,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, sa
     )
   )
 
-  pdf(paste0(savePath, "Multi-uniCOX.pdf"), width = 12, height = 9)
+  pdf(paste0(savePath, "Multi-uniCOX of ",tissue,".pdf"), width = 12, height = 9)
   print(p)
   dev.off()
 
@@ -548,7 +561,7 @@ KMVisualize <- function(df, celltype, cutoff = "best", savePath = NULL) {
   if (cutoff == "mean") {
     df[, 1] <- ifelse(df[, 1] >= mean(df[, 1]), "high", "low")
   }
-  if(cutoff == "best"){
+  if (cutoff == "best") {
     cutpoint <- surv_cutpoint(data = df, time = "RFS_time", event = "RFS_status", variables = celltype)
     cutpoint <- summary(cutpoint)$cutpoint
     df[, 1] <- ifelse(df[, 1] >= cutpoint, "high", "low")
@@ -584,7 +597,7 @@ CorrelationAnalysis <- function(df, savePath) {
     scale_fill_gradientn(colours = c("#77C034", "white", "#C388FE")) +
     geom_panel_grid(colour = "black", size = 0.5)
 
-  pdf(savePath, height = 12, width = 12)
+  pdf(savePath, height = 15, width = 15)
   print(p)
   dev.off()
   return(NULL)
@@ -641,6 +654,7 @@ BarPlotForCelltypeFraction <- function(sce, rowSep, colSep, savePath) {
   meta <- colData(sce)
 
   Majortypes <- meta[, "MajorType"]
+  majortypes <- names(table(Majortypes))
   Subtypes <- meta[, "SubType"]
   IDs <- meta[, "ID"]
   Tissues <- meta[, rowSep]
@@ -663,22 +677,65 @@ BarPlotForCelltypeFraction <- function(sce, rowSep, colSep, savePath) {
     plotdfTemp1 <- subset(plotdf, Tissue == tissue)
     for (group in names(table(Groups))) {
       plotdfTemp2 <- subset(plotdfTemp1, Relapse == group)
+      for (majortype in majortypes) {
+        plotdfTemp3 <- subset(plotdfTemp2, Majortype == majortype)
+        plotdfTemp3$Subtype <- as.factor(as.character(plotdfTemp3$Subtype))
 
-      p <- ggplot(plotdfTemp2, aes(x = ROI, fill = Subtype)) +
-        geom_bar(stat = , color = "black", width = .5, position = "fill") +
-        labs(y = "Relative abundance (%)") +
-        scale_fill_manual(values = colors) +
-        scale_y_continuous(expand = c(0, 0)) +
-        theme_classic() +
-        theme(
-          axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5, size = 5)
-        )
+        p <- ggplot(plotdfTemp3, aes(x = ROI, fill = Subtype)) +
+          geom_bar(stat = , color = "black", width = .5, position = "fill") +
+          labs(y = "Relative abundance (%)") +
+          scale_fill_manual(values = colors) +
+          scale_y_continuous(expand = c(0, 0)) +
+          theme_classic() +
+          theme(
+            axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5, size = 5)
+          )
 
-      pdf(paste0(savePath2, "Abundance Barplot of Relapse_", group, " in ", tissue, ".pdf"), height = 6, width = 8)
-      print(p)
-      dev.off()
+        pdf(paste0(savePath2, majortype, " Abundance Barplot of Relapse_", group, " in ", tissue, ".pdf"), height = 6, width = 8)
+        print(p)
+        dev.off()
+      }
     }
   }
+
+  return(NULL)
+}
+
+## Plot the density dotplot of certain 2 channles
+PlotDensityDotplot <- function(sce, marker1, marker2, MajorType = NULL, sampleSize = 100000, savePath) {
+  if (!is.null(MajorType)) {
+    sce <- sce[, sce$MajorType == MajorType]
+  }
+  exp <- assay(sce)
+  exp <- exp[c(marker1, marker2), ]
+
+  set.seed(619)
+  exp_ <- exp[, sample.int(ncol(exp), sampleSize, replace = F)]
+  exp_ <- as.data.frame(t(exp_))
+  colnames(exp_) <- c("x", "y")
+
+  p <- ggplot(data = exp_, aes(x = x, y = y)) +
+    geom_pointdensity(size = 0.3) +
+    scale_color_viridis() +
+    # geom_smooth(method = lm) +
+    stat_cor(method = "spearman", label.x = 0.5, label.y = 0.9) +
+    xlab(marker1) +
+    ylab(marker2) +
+    theme(axis.title.x = element_text(size = 16, face = "bold", vjust = 0.5, hjust = 0.5)) +
+    theme(axis.title.y = element_text(size = 16, face = "bold", vjust = 0.5, hjust = 0.5)) +
+    theme_bw() +
+    theme(
+      panel.grid.major = element_line(colour = NA),
+      panel.background = element_rect(fill = "transparent", colour = NA),
+      plot.background = element_rect(fill = "transparent", colour = NA),
+      panel.grid.minor = element_blank(),
+      text = element_text(size = 12, family = "serif")
+    ) +
+    theme(legend.position = "none")
+
+  pdf(paste0(savePath, marker1, "_", marker2, " in ", MajorType, " densityDotplot.pdf"), width = 4, height = 4)
+  print(p)
+  dev.off()
 
   return(NULL)
 }

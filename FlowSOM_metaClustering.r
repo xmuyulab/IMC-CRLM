@@ -46,7 +46,7 @@ MetaClustering <- function(data,method,elbow_test=T,k_value=NULL,kmax=NULL,kstep
     elbow_test=T
     cat("k_value is not specified, start elbow test...\n")
   }
-  res<-k_value  
+  res <- k_value  
    if(elbow_test==T){
          res <- DetermineNumberOfClusters(data,kmax,method,...)
    }
@@ -283,7 +283,7 @@ metaClustering_som <- function(data, k=7){
 
 metaClustering_PhenoGraph<-function(data,k=30){
   #as.numeric(membership(Rphenograph(data,k=k))) xu
-  as.numeric(Rphenograph(data,k=k)[[2]]$membership)
+  as.numeric(cytofkit::Rphenograph(data,k=k)$membership)
 }
 
 

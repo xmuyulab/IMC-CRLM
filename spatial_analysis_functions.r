@@ -7,6 +7,8 @@ library(survival)
 library(rtiff)
 library(tiff)
 library(ggDoubleHeat)
+library(grid)
+library(magick)
 
 ### Make groupInfo file
 GetGroupInfo <- function(sce, clinical){
@@ -47,7 +49,13 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        rowname_ <- rownames(csvTemp)
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        })
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.",replacement = " ",x)
+        })
+        rowname_ <- colname_
 
         for (i in 1:nrow(csvTemp)) {
             for (j in 1:ncol(csvTemp)) {
@@ -76,7 +84,13 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        rowname_ <- rownames(csvTemp)
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        })
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.",replacement = " ",x)
+        })
+        rowname_ <- colname_
 
         for (i in 1:nrow(csvTemp)) {
             for (j in 1:ncol(csvTemp)) {
@@ -223,6 +237,7 @@ LoadAnalysisResult <- function(IDs1,celltypes,sce){
         csvTemp <- read.csv(filepathTemp)
         rownames(csvTemp) <- csvTemp[, 1]
         csvTemp <- csvTemp[, -1]
+        colnames(csvTemp) <- rownames(csvTemp)
         csvTemp <- as.matrix(csvTemp)
 
         ## sort the interaction number
@@ -258,7 +273,7 @@ LoadAnalysisResult <- function(IDs1,celltypes,sce){
             cellnumMat[j,] <- cellnumMat[j,] + c2num
         }
 
-        TempMat <- round(TempMat / cellnumMat,6) 
+        TempMat <- ifelse(cellnumMat == 0,0,round(TempMat / cellnumMat,6))  
 
         array1[, , i] <- TempMat
         i = i + 1
@@ -290,11 +305,17 @@ TestDiff <- function(array1,array2,celltypes,savepath){
                MaskMat[i, j] <- -1
             }
 
-            FoldChangeMat[i,j] <- mean(value1) / mean(value2)
+            if(mean(value2) == 0){
+FoldChangeMat[i,j] <- 0
+            }
+            else {
+               FoldChangeMat[i,j] <- mean(value1) / mean(value2)
+            }
+            
         }
     }
     PvalueMat <- -log10(PvalueMat)
-    FoldChangeMat <- log2(FoldChangeMat)
+    FoldChangeMat <- ifelse(FoldChangeMat==0,0,log2(FoldChangeMat))
 
     HeatmapForDiff(PvalueMat,MaskMat,FoldChangeMat,savepath)
 
@@ -318,7 +339,7 @@ HeatmapForDiff <- function(PvalueMat,MaskMat,FoldChangeMat,savepath){
     p <- pheatmap(
         plotdf,
         cellwidth = 16, cellheight = 12,
-        cluster_row = T, cluster_col = T,
+        cluster_row = F, cluster_col = F,
         #legend_labels = c("Up-regulated","down-regulated"),legend_breaks = c(-0.5,0.5),
         angle_col = '90', display_numbers = sig_mat, fontsize_number = 15
     )
@@ -435,7 +456,7 @@ PlotMarker <- function(sce, ROI, Marker, SavePath){
 }
 
 ## plot celltypes on cell-level 
-PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath){
+PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath = NULL){
     #colnames(colData(sce))
     sce_ <- sce[,sce$ID == ROI]
 
@@ -461,13 +482,13 @@ PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath){
         scale_colour_manual(values = c("grey",myPalette)) +
         labs(title = paste0(ROI))+
         theme_test()
-        
+
     pdf(SavePath, height = 6, width = 8)
     #pdf("test.pdf", height = 6, width = 8)
     print(p)
     dev.off()
 
-    return(NULL)
+    return(p)
 }
 
 
@@ -689,6 +710,31 @@ VisTypeMaskChannel <- function(sce, ROI, celltypes, channel, maskPath, channelPa
 
     png::writePNG(MaskMat, paste0(SavePath, "CellMask.png"), dpi = 100)
     png::writePNG(ChannelArray, paste0(SavePath, channel[1], "-", channel[2], "_channel.png"), dpi = 100)
+    cat(ROI, ": CellMask, celltypes and channel image were done!",'\n')
+    return(NULL)
+}
+
+## Visualize the cellsubtype on mask and channel of ROI on mask (undone)
+VisTypeonMask <- function(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath, ChannelPath, SavePath){
+    if (!dir.exists(SavePath)) {dir.create(SavePath)}
+    SavePath <- paste0(SavePath,ROI,"/")
+    if (!dir.exists(SavePath)) {dir.create(SavePath)}
+    
+    MaskMat <- LoadCellMask(CellMaskPath, ROI)
+    ChannelArray <- LoadChannelImage(ChannelPath, ROI, channels2plot)
+    p <- PlotCelltypes(sce_, ROI, celltypes2plot,returenFigure = T)
+
+    png::writePNG(MaskMat, paste0(SavePath, "CellMask.png"), dpi = 100)
+    png::writePNG(ChannelArray, paste0(SavePath, channels2plot[1], "-", channels2plot[2], "_channel.png"), dpi = 100)
+
+    ## mask lay on celltype
+    mask <- image_read(paste0(SavePath, "CellMask.png"))
+
+    pdf("test.pdf")
+    print(p)
+    grid.raster(mask)
+    dev.off()
+
     cat(ROI, ": CellMask, celltypes and channel image were done!",'\n')
     return(NULL)
 }

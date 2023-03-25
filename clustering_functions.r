@@ -13,6 +13,9 @@ library(cowplot)
 library(RColorBrewer)
 library(SingleCellExperiment)
 
+library(randomForest)
+library(caret)
+
 ## load data
 load_RawData <- function(raw_csv_dir, meta_csv_dir, Area_cutoff = 5) {
   file_name <- list.files(raw_csv_dir, pattern = ".csv$", full = TRUE)
@@ -54,6 +57,7 @@ load_RawData <- function(raw_csv_dir, meta_csv_dir, Area_cutoff = 5) {
   })
 
   total.res2 <- total.res[total.res$ID %in% meta$ID, ]
+  total.res2$Batch <- meta[match(total.res$ID, meta$ID), ]$Batch
 
   total.res2.qc <- total.res2[total.res2$Area > Area_cutoff, ]
 
@@ -65,27 +69,54 @@ load_Marker <- function(panel) {
   allMarker <- panel[panel$full == 1, ]$marker
   allMarker <- allMarker[!is.na(allMarker)]
 
-  IdMarker <- panel[panel$Identification == 1, ]$marker
-  IdMarker <- IdMarker[!is.na(IdMarker)]
+  ## Major markers
+  MajorIdMarker <- panel[panel$MajorIden == 1, ]$marker
+  MajorIdMarker <- MajorIdMarker[!is.na(MajorIdMarker)]
+
+  ## Minor markers
+  ### Lympocytes
+  LymphocyteIdMarker <- panel[panel$LymIden == 1, ]$marker
+  LymphocyteIdMarker <- LymphocyteIdMarker[!is.na(LymphocyteIdMarker)]
+  ### Myeloids
+  MyeloidsIdMarker <- panel[panel$MyeIden == 1, ]$marker
+  MyeloidsIdMarker <- MyeloidsIdMarker[!is.na(MyeloidsIdMarker)]
+  ### Stromal
+  StromalIdMarker <- panel[panel$StrIden == 1, ]$marker
+  StromalIdMarker <- StromalIdMarker[!is.na(StromalIdMarker)]
+  ### Tumor
+  TumorIdMarker <- panel[panel$TumIden == 1, ]$marker
+  TumorIdMarker <- TumorIdMarker[!is.na(TumorIdMarker)]
+  ### Reclstering
+  ReclusterMarker <- panel[panel$Reclustering == 1, ]$marker
+  ReclusterMarker <- ReclusterMarker[!is.na(ReclusterMarker)]
 
   MarkerList <- list()
   MarkerList[["All_Marker"]] <- allMarker
-  MarkerList[["Iden_Marker"]] <- IdMarker
+  MarkerList[["Major_Marker"]] <- MajorIdMarker
+  MarkerList[["Lymphocyte_Marker"]] <- LymphocyteIdMarker
+  MarkerList[["Myeloid_Marker"]] <- MyeloidsIdMarker
+  MarkerList[["Stromal_Marker"]] <- StromalIdMarker
+  MarkerList[["Tumor_Marker"]] <- TumorIdMarker
+  MarkerList[["Recluster_Marker"]] <- ReclusterMarker
 
   return(MarkerList)
 }
 
 ## normalize data
-normData <- function(sce_data, marker_total, censor_val = NULL, arcsinh = FALSE, norm_method = "0-1") {
+normData <- function(sce_data, marker_total, censor_val = NULL, arcsinh = FALSE, is.Batch = F, norm_method = "0-1") {
   #' censor_val=0.999'
   # sce_data <- sce_snf_FDR0.1_nozero
   # sce_data <- sce_p95_FDR0.01_median_0712
   # sce_data <- sce_p85_FDR0.01_median_0713
+  if (is.Batch) {
+    batches <- sce_data$Batch
+  }
   if (is.data.frame(sce_data)) {
     exp_data <- sce_data[, c(marker_total)]
   } else {
     exp_data <- data.frame(t(assay(sce_data)), check.names = TRUE)
   }
+
   if (arcsinh) {
     exp_data <- asinh(exp_data)
   }
@@ -95,29 +126,57 @@ normData <- function(sce_data, marker_total, censor_val = NULL, arcsinh = FALSE,
   } else {
     exp_data$filelist <- sce_data@metadata$filelist
   }
+  if (is.Batch) {
+    batcheNames <- names(table(batches))
+    dat <- as.data.frame(matrix(nrow = 0, ncol = 5))
+    for (batch in batcheNames) {
+      dattemp <- data.table((exp_data[batches %in% batch, ]) %>% pivot_longer(-filelist, names_to = "channel", values_to = "mc_counts"))
+      dattemp$mc_counts <- as.numeric(dattemp$mc_counts)
 
-  dat <- data.table(exp_data %>% pivot_longer(-filelist, names_to = "channel", values_to = "mc_counts"))
-  dat$mc_counts <- as.numeric(dat$mc_counts)
-
-  if (!is.null(censor_val)) {
-    dat[, c_counts := censor_dat(mc_counts, censor_val), by = channel]
-    if (norm_method == "0-1") {
-      dat[, c_counts_scaled := ((c_counts - min(c_counts)) / (max(c_counts) - min(c_counts))), by = channel]
-      dat[c_counts_scaled < 0, c_counts_scaled := 0, by = channel]
-    } else if (norm_method == "znorm") {
-      dat[, c_counts_scaled := ((c_counts - mean(c_counts)) / sd(c_counts)), by = channel]
-      # dat[, c_counts_scaled := scale(c_counts), by=channel]
-    } else if (norm_method == "null") {
-      dat[, c_counts_scaled := c_counts, by = channel]
+      if (!is.null(censor_val)) {
+        dattemp[, c_counts := censor_dat(mc_counts, censor_val), by = channel]
+        if (norm_method == "0-1") {
+          dattemp[, c_counts_scaled := ((c_counts - min(c_counts)) / (max(c_counts) - min(c_counts))), by = channel]
+          dattemp[c_counts_scaled < 0, c_counts_scaled := 0, by = channel]
+        } else if (norm_method == "znorm") {
+          dattemp[, c_counts_scaled := ((c_counts - mean(c_counts)) / sd(c_counts)), by = channel]
+        } else if (norm_method == "null") {
+          dattemp[, c_counts_scaled := c_counts, by = channel]
+        }
+      } else {
+        if (norm_method == "0-1") {
+          dattemp[, c_counts_scaled := ((mc_counts - min(mc_counts)) / (max(mc_counts) - min(mc_counts))), by = channel]
+          dattemp[c_counts_scaled < 0, c_counts_scaled := 0, by = channel]
+        } else if (norm_method == "znorm") {
+          dattemp[, c_counts_scaled := ((mc_counts - mean(mc_counts)) / sd(mc_counts)), by = channel]
+        }
+      }
+      dat <- rbind(dat, dattemp)
     }
   } else {
-    if (norm_method == "0-1") {
-      dat[, c_counts_scaled := ((mc_counts - min(mc_counts)) / (max(mc_counts) - min(mc_counts))), by = channel]
-      dat[c_counts_scaled < 0, c_counts_scaled := 0, by = channel]
-    } else if (norm_method == "znorm") {
-      dat[, c_counts_scaled := ((mc_counts - mean(mc_counts)) / sd(mc_counts)), by = channel]
+    dat <- data.table(exp_data %>% pivot_longer(-filelist, names_to = "channel", values_to = "mc_counts"))
+    dat$mc_counts <- as.numeric(dat$mc_counts)
+
+    if (!is.null(censor_val)) {
+      dat[, c_counts := censor_dat(mc_counts, censor_val), by = channel]
+      if (norm_method == "0-1") {
+        dat[, c_counts_scaled := ((c_counts - min(c_counts)) / (max(c_counts) - min(c_counts))), by = channel]
+        dat[c_counts_scaled < 0, c_counts_scaled := 0, by = channel]
+      } else if (norm_method == "znorm") {
+        dat[, c_counts_scaled := ((c_counts - mean(c_counts)) / sd(c_counts)), by = channel]
+      } else if (norm_method == "null") {
+        dat[, c_counts_scaled := c_counts, by = channel]
+      }
+    } else {
+      if (norm_method == "0-1") {
+        dat[, c_counts_scaled := ((mc_counts - min(mc_counts)) / (max(mc_counts) - min(mc_counts))), by = channel]
+        dat[c_counts_scaled < 0, c_counts_scaled := 0, by = channel]
+      } else if (norm_method == "znorm") {
+        dat[, c_counts_scaled := ((mc_counts - mean(mc_counts)) / sd(mc_counts)), by = channel]
+      }
     }
   }
+
   a <- data.frame(dat$channel, dat$c_counts_scaled) %>%
     group_by(dat.channel) %>%
     dplyr::mutate(index = row_number()) %>%
@@ -127,7 +186,7 @@ normData <- function(sce_data, marker_total, censor_val = NULL, arcsinh = FALSE,
     ) %>%
     dplyr::select(-index)
 
-  histdata <- melt(a, variable.name = "marker", value.name = "expression")
+  histdata <- reshape2::melt(a, variable.name = "marker", value.name = "expression")
   p1 <- ggplot(data = histdata, aes(x = expression)) +
     geom_histogram(bins = 60, colour = "black", fill = "blue", alpha = 0.5) +
     facet_wrap(~marker, scale = "free")
@@ -159,7 +218,7 @@ censor_dat <- function(x, quant = 0.999, ignorezero = TRUE, symmetric = F) {
 }
 
 ## FloSOM clustering
-runFlowsomPheno <- function(exp_df, markers, xdim = 100, ydim = 100, phenok = 15) {
+runFlowsomPheno <- function(norm_exp_df, markers, xdim = 100, ydim = 100, phenok = 15) {
   set.seed(123)
   Do_FlowSOM <- TRUE
   if (Do_FlowSOM) {
@@ -173,7 +232,7 @@ runFlowsomPheno <- function(exp_df, markers, xdim = 100, ydim = 100, phenok = 15
 
 
     #  (B).运行SOM聚类：
-    FlowSOM_input_data <- exp_df[, markers]
+    FlowSOM_input_data <- norm_exp_df[, markers]
     print(dim(FlowSOM_input_data))
     map <- SOM(
       data = as.matrix(FlowSOM_input_data),
@@ -208,23 +267,36 @@ runFlowsomPheno <- function(exp_df, markers, xdim = 100, ydim = 100, phenok = 15
   return(metacluster_result)
 }
 
-FlowSOM_clustering <- function(exp_df, norm_exp_df, markers, phenographOnly = F, xdim = 100, ydim = 100, k = 100, method, savePath, phenok = 30) {
-  if (!phenographOnly) {
-    result_test <- runFlowsomPheno(norm_exp_df, markers, xdim = xdim, ydim = ydim, phenok = phenok) # nolint
-    norm_exp_df["flowsom100pheno15"] <- (result_test[["metacluster_result"]])
-    tsneplot <- (result_test[["plotdf"]])
+FlowSOM_clustering <- function(exp_df, norm_exp_df, markers, phenographOnly = F, xdim = 100, ydim = 100, Type, method, savePath, phenok = 30, using.kmenas = F) {
+  if (using.kmenas) {
+    df <- norm_exp_df[, markers]
+    result_test <- kmeans(df, centers = phenok, iter.max = 1000000)
+    norm_exp_df[paste0(Type, "_flowsom100pheno15")] <- result_test$cluster
     meta <- exp_df[setdiff(colnames(exp_df), colnames(norm_exp_df))]
     if (!dir.exists(savePath)) {
       dir.create(savePath)
     }
-    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, method, "_flowsom_pheno_k", phenok, ".csv"), row.names = FALSE)
-    write.csv(tsneplot, file = paste0(savePath, method, "_flowsom_pheno_tsne_k", phenok, ".csv"), row.names = FALSE)
+    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, Type, "_", method, "_flowsom_pheno_k", phenok, ".csv"), row.names = FALSE)
+    return(norm_exp_df)
+  }
+  if (!phenographOnly) {
+    result_test <- runFlowsomPheno(norm_exp_df, markers, xdim = xdim, ydim = ydim, phenok = phenok) # nolint
+    norm_exp_df[paste0(Type, "_flowsom100pheno15")] <- (result_test[["metacluster_result"]])
+    # tsneplot <- (result_test[["plotdf"]])
+    meta <- exp_df[setdiff(colnames(exp_df), colnames(norm_exp_df))]
+    if (!dir.exists(savePath)) {
+      dir.create(savePath)
+    }
+    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, Type, "_", method, "_flowsom_pheno_k", phenok, ".csv"), row.names = FALSE)
+    # write.csv(tsneplot, file = paste0(savePath, Type,"_",method, "_flowsom_pheno_tsne_k", phenok, ".csv"), row.names = FALSE)
   } else {
-    tmp.pheno_out <- cytofkit::Rphenograph(norm_exp_df[, markers], k = k)
+    tmp.pheno_out <- cytofkit::Rphenograph(norm_exp_df[, markers], k = phenok)
     norm_exp_df$cluster <- igraph::membership(tmp.pheno_out)
     meta <- exp_df[setdiff(colnames(exp_df), colnames(norm_exp_df))]
-    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, method, "_pheno.csv"), row.names = FALSE)
-    write.csv(tsneplot, file = paste0(savePath, method, "_pheno_tsne.csv"), row.names = FALSE)
+    if (!dir.exists(savePath)) {
+      dir.create(savePath)
+    }
+    write.csv(cbind(norm_exp_df, meta), file = paste0(savePath, Type, "_", method, "_flowsom_pheno_k", phenok, ".csv"), row.names = FALSE)
   }
 
   print(paste0("FlowSOM clustering is done! savePath is ", savePath))
@@ -574,14 +646,17 @@ MarkerHeatmap <- function(data, markers, savePath) {
 
   annotationRow <- as.data.frame(plotdf[, ncol(plotdf)])
   colnames(annotationRow) <- "MajorType"
+  ann_colors <- list(MajorType = c(Lymphocyte = "#66C2A5", Myeloid = "#FC8D62", Stromal = "#8DA0CB", Tumor = "#E78AC3", UNKNOWN = "#A6D854"))
 
   p <- pheatmap(plotdf[, 1:length(markers)],
-    cluster_rows = F, gaps_row = c(2, 5, 11, 14,20),
-    cluster_cols = F, gaps_col = c(10, 19, 23, 28),
-    annotation_row = annotationRow
+    cluster_rows = F, # gaps_row = c(8, 25, 30, 34),
+    cluster_cols = F, # gaps_col = c(7, 16, 20, 21),
+    color = colorRampPalette(colors = c("white", "red"))(100),
+    annotation_row = annotationRow,
+    annotation_colors = ann_colors
   )
 
-  pdf(file = paste0(savePath,"Cluster Markers Heatmap.pdf"), width = 12, height = 8)
+  pdf(file = paste0(savePath, "Cluster Markers Heatmap.pdf"), width = 12, height = 8)
   print(p)
   dev.off()
 
@@ -625,5 +700,64 @@ SubtypeHeatmap <- function(sce, label, savePath) {
   print(p)
   dev.off()
 
+  return(NULL)
+}
+
+## Access the clustering result
+AssessClustering <- function(exp, markers, clusterCol, tFraction = 0.8, sampleSize = 50000, savePath) {
+  set.seed(619)
+
+  exp <- exp[sample.int(nrow(exp), size = sampleSize), ]
+
+  y <- exp[, clusterCol]
+  x <- exp[, markers]
+
+  cat("The category are ", clusterCol, "\n")
+
+  train <- sample.int(nrow(x), size = as.integer(nrow(x) * tFraction))
+  Xtrain <- x[train, ]
+  Xtest <- x[-train, ]
+
+  Ytrain <- as.factor(y[train])
+  Ytest <- y[-train]
+
+  dfTrain <- cbind(Xtrain, "Label" = as.factor(Ytrain))
+
+  RF <- randomForest(Label ~ ., data = dfTrain, importance = TRUE)
+  predict <- predict(RF, Xtest)
+
+  ## confusion matrix
+  TrainConfuMat <- RF[["confusion"]]
+  TrainConfuMat <- TrainConfuMat[, -ncol(TrainConfuMat)]
+  TrainConfuMat <- apply(TrainConfuMat, MARGIN = 2, function(x) {
+    return(round(x / sum(x), digits = 3))
+  })
+
+  TestConfuMat <- confusionMatrix(predict, as.factor(Ytest))[["table"]]
+  TestConfuMat <- apply(TestConfuMat, MARGIN = 2, function(x) {
+    return(round(x / sum(x), digits = 3))
+  })
+
+  ## visualize
+  pTrain <- pheatmap(TrainConfuMat,
+    color = brewer.pal(9, "Greens"),
+    cellwidth = 25, cellheight = 15,
+    cluster_row = F, cluster_col = F,
+    angle_col = "90", display_numbers = TRUE, fontsize_number = 8
+  )
+
+  pTest <- pheatmap(TestConfuMat,
+    color = brewer.pal(9, "Greens"),
+    cellwidth = 25, cellheight = 15,
+    cluster_row = F, cluster_col = F,
+    angle_col = "90", display_numbers = TRUE, fontsize_number = 8
+  )
+
+  pdf(paste0(savePath, "Confusion Matrix of Traning.pdf"), width = 12, height = 8)
+  print(pTrain)
+  dev.off()
+  pdf(paste0(savePath, "Confusion Matrix of Test.pdf"), width = 12, height = 8)
+  print(pTest)
+  dev.off()
   return(NULL)
 }

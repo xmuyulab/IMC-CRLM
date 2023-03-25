@@ -177,7 +177,7 @@ IDs = [x for x in Counter(adata.obs["ID"]).keys()]
 
 multiprocess = True
 if multiprocess:
-    multi_threads = 70
+    multi_threads = 32
     with Pool(multi_threads) as p:
         p.starmap(PermutationTestMain, [(adata, ID, 22,os.path.join("/mnt/data/lyx/IMC/analysis/spatial/permutation",ID)) for ID in IDs])
 

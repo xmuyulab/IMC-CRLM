@@ -2,11 +2,15 @@
 library(pheatmap)
 library(ggplot2)
 library(ggpubr)
+library(ggrepel)
 library(survival)
 library(survminer)
 library(Rtsne)
 library(RColorBrewer)
+library(SingleCellExperiment)
 library(ggbeeswarm)
+library(Hmisc)
+library(ggcor)
 
 ## clinical information
 load_clinical <- function(sce, clinicalFilePath) {
@@ -328,9 +332,13 @@ KMForCNP <- function(df, cluster, savePath) {
 }
 
 ## clutering via certain markers
-Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10, savePath) {
+Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ReSubType = NULL, PatternCol, ncluster = 10, savePath) {
     ## extract major types
-    sce_ <- sce[, colData(sce)$MajorType %in% ReMajorType]
+    if (is.null(ReSubType)) {
+        sce_ <- sce[, colData(sce)$MajorType %in% ReMajorType]
+    } else {
+        sce_ <- sce[, colData(sce)$SubType %in% ReSubType]
+    }
 
     exp <- assay(sce_)
     exp <- exp[markers, ]
@@ -338,14 +346,15 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
     ## K-means clustering
     exp <- t(exp) ## row should be sample
     set.seed(619)
-    fit <- kmeans(exp, centers = ncluster, nstart = 25, iter.max = 500)
+    fit <- kmeans(exp, centers = ncluster, nstart = 50, iter.max = 100000)
     table(fit$cluster)
 
     colData(sce_)[, ReclusterName] <- fit$cluster
 
     ## T-sne visualization
-    sampleidx <- sample(1:nrow(exp), size = 15000, replace = F) ### sample 15k cells to visualize
-
+    if(nrow(exp)<=15000){sampleidx <- c(1:nrow(exp))}
+    else{sampleidx <- sample(1:nrow(exp), size = 15000, replace = F)} ### sample 15k cells to visualize}
+    
     exp_sample <- exp[sampleidx, ]
     tsne <- Rtsne(exp_sample, dims = 2, PCA = F, verbose = F, max_iter = 500, check_duplicates = F)
     tsne_coor <- data.frame(tSNE1 = tsne$Y[, 1], tSNE2 = tsne$Y[, 2])
@@ -366,7 +375,7 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
         geom_text(data = centers, aes(x, y, label = cluster)) +
         facet_grid(~group)
 
-    pdf(paste0(savePath, "tSNE reclustering of ", ReclusterName, ".pdf"), height = 6, width = 10)
+    pdf(paste0(savePath, "tSNE reclustering of ", ReclusterName, ".pdf"), height = 4, width = 8)
     print(p)
     dev.off()
 
@@ -380,7 +389,7 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ncluster = 10
     PlotMarkerOnTSNE(exp_sample, tsne_coor, ReclusterName, paste0(savePath, "marker TSNE of ", ReclusterName, "/"))
 
     ## The relationship between re-clustering, origin cell subtype and Cellular pattern
-    SubtypeInReclustering(sce_, reclusteringCol = ReclusterName, OrigintypeCol = "SubType", PatternCol = "kmeans_knn_20", savePath)
+    SubtypeInReclustering(sce_, reclusteringCol = ReclusterName, OrigintypeCol = "SubType", PatternCol = PatternCol, savePath)
 
     return(sce_)
 }
@@ -415,7 +424,8 @@ BubbleForcluterMarker <- function(sce_, colname1, markers, savePath) {
         theme(
             panel.background = element_blank(),
             panel.grid.major = element_line(colour = "white"),
-            panel.border = element_rect(colour = "white", fill = NA)
+            panel.border = element_rect(colour = "white", fill = NA),
+            axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)
         ) +
         guides(color = guide_legend(override.aes = list(size = 8, alpha = 1)))
     pdf(paste0(savePath, "Bubble plot of ", colname1, ".pdf"), height = 6, width = 8)
@@ -454,7 +464,7 @@ PlotMarkerOnTSNE <- function(expDF, tsneDF, ReclusterName, savePath) {
             theme_classic() +
             facet_grid(Marker ~ group)
 
-        pdf(paste0(savePath, marker, " expression on tSNE reclustering.pdf"), height = 3, width = 8)
+        pdf(paste0(savePath, marker, " expression on tSNE reclustering.pdf"), height = 3, width = 6)
         print(p)
         dev.off()
     }
@@ -531,7 +541,6 @@ PlotCertainTypeinPattern <- function(sce_, Col1, types1, Col2, groupCol, savePat
     VecGroup <- as.character(colData(sce_)[, groupCol])
 
     idx <- Vec1 %in% as.character(types1)
-
 
     Vec2 <- Vec2[idx]
     VecGroup <- VecGroup[idx]
@@ -780,11 +789,11 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
 }
 
 ## Assign new label
-AssignNewlabel <- function(sce_, phenoLabel, ReclusterName, interstType, cutoffType, is.reuturnMeans = FALSE) {
+AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType, cutoffType, cutoffValue = 10, numGroup=2, is.reuturnsce = FALSE) {
     colData(sce_)[, phenoLabel] <- "Pheno_neg"
     colData(sce_)[, phenoLabel][which(colData(sce_)[, ReclusterName] %in% interstType)] <- "Pheno_pos"
 
-    if (!is.reuturnMeans) {
+    if (!is.reuturnsce) {
         CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = FALSE)
         if (cutoffType == "median") {
             Cutoff <- median(CountMat[, "Pheno_pos"])
@@ -792,28 +801,24 @@ AssignNewlabel <- function(sce_, phenoLabel, ReclusterName, interstType, cutoffT
         if (cutoffType == "mean") {
             Cutoff <- mean(CountMat[, "Pheno_pos"])
         }
+        if (cutoffType == "manual") {
+            Cutoff <- cutoffValue
+        }
 
         RList <- list()
         RList[["sce"]] <- sce_
-        RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
-        RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
-
-        return(RList)
-    }
-    else {
-       CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = is.reuturnMeans)
-        if (cutoffType == "median") {
-            Cutoff <- median(CountMat[, "Pheno_pos"])
+        if (numGroup == 2) {
+            RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
+            RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
         }
-        if (cutoffType == "mean") {
-            Cutoff <- mean(CountMat[, "Pheno_pos"])
+        if (numGroup == 3) {
+            RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
+            RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff & CountMat[, "Pheno_pos"] > 0), ])
+            RList[["none_ROI"]] <- allROIs[!allROIs%in%c(RList[["high_ROI"]],RList[["low_ROI"]])]
         }
-
-        RList <- list()
-        RList[["high_PID"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
-        RList[["low_PID"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
-
         return(RList)
+    } else {
+        return(sce_)
     }
 }
 
@@ -838,7 +843,13 @@ getResult <- function(ResultPath, ROIs, celltypes, p_threshold = 0.05) {
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        rowname_ <- rownames(csvTemp)
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        })
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.",replacement = " ",x)
+        })
+        rowname_ <- colname_
 
         for (i in 1:nrow(csvTemp)) {
             for (j in 1:ncol(csvTemp)) {
@@ -865,7 +876,13 @@ getResult <- function(ResultPath, ROIs, celltypes, p_threshold = 0.05) {
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        rowname_ <- rownames(csvTemp)
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        })
+        colname_ <- sapply(colname_,function(x){
+            gsub(pattern = "\\.",replacement = " ",x)
+        })
+        rowname_ <- colname_
 
         for (i in 1:nrow(csvTemp)) {
             for (j in 1:ncol(csvTemp)) {
@@ -965,14 +982,57 @@ DoubleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, p
     return(NULL)
 }
 
+# Double heatmap
+TribleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, MergeDF3, labelDF3, group3, savePath) {
+    DF1 <- MergeDF1 * labelDF1
+    DF2 <- MergeDF2 * labelDF2
+    DF3 <- MergeDF3 * labelDF3
+
+    plotdf <- matrix(data = 0, nrow = nrow(DF1) * ncol(DF1), ncol = 5)
+    plotdf <- as.data.frame(plotdf)
+
+    plotdf[, 1] <- rep(rownames(DF1), times = ncol(DF1))
+    plotdf[, 2] <- rep(colnames(DF1), each = nrow(DF1))
+    plotdf[, 3] <- as.numeric(as.matrix(DF1))
+    plotdf[, 4] <- as.numeric(as.matrix(DF2))
+    plotdf[, 5] <- as.numeric(as.matrix(DF3))
+
+    colnames(plotdf) <- c("Celltype1", "Celltype2", "High-Interaction", "Low-Interaction", "None-Interaction")
+
+        plotdf2 <- cbind(rep(plotdf[, 1], times = 3), rep(plotdf[, 2], times = 3), c(plotdf[, 3], plotdf[, 4], plotdf[, 5]), rep(c(group1, group2, group3), each = nrow(plotdf)))
+        plotdf2 <- as.data.frame(plotdf2)
+        plotdf2[, 3] <- as.numeric(plotdf2[, 3])
+        colnames(plotdf2) <- c("Celltype1", "Celltype2", "Interaction", "Group")
+
+        p <- ggplot(plotdf2, aes(x = Celltype1, y = Celltype2)) +
+            geom_tile(aes(fill = Interaction)) +
+            scale_fill_gradient2(low = "#0000ff", high = "#ff0000", mid = "#ffffff") +
+            theme_bw() +
+            theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+            facet_grid(. ~ Group)
+
+        pdf(savePath, height = 6, width = 18)
+        print(p)
+        dev.off()    
+
+
+
+    return(NULL)
+}
+
 ## Swarm plot for high- and low- marker groups certain celltype
-AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, groupsName, celltype, marker, savePath) {
+AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2,AbundanceDF3, groupsName, celltype, marker, savePath) {
+    if (!(celltype %in% colnames(AbundanceDF1)) | !(celltype %in% colnames(AbundanceDF2)) | !(celltype %in% colnames(AbundanceDF3))) {
+        cat("Celltype ", celltype, " not in matrix!", "\n")
+        return(NULL)
+    }
     Counts1 <- AbundanceDF1[, celltype]
     Counts2 <- AbundanceDF2[, celltype]
+    Counts3 <- AbundanceDF3[, celltype]
 
-    ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2))
-    CountsVec <- c(Counts1, Counts2)
-    GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)))
+    ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2), rownames(AbundanceDF3))
+    CountsVec <- c(Counts1, Counts2, Counts3)
+    GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)), rep(groupsName[3], length(Counts3)))
 
     plotdf <- cbind(ROIsVec, CountsVec, GroupsVec)
     plotdf <- as.data.frame(plotdf)
@@ -986,10 +1046,13 @@ AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, groupsName, celltype,
         geom_jitter(aes(fill = Group)) +
         theme_bw() +
         labs(x = NULL) +
-        scale_color_manual(values = c("#648fff", "#d36b1c")) +
-        stat_compare_means(label.y = (max(plotdf$Count) + 0.5), method = "t.test")
+        scale_color_manual(values = brewer.pal(3, "Paired")) +
+        stat_compare_means(
+            comparisons = list(c("high","low"),c("low","none"),c("high","none")),
+            method = "t.test"
+        )
 
-    pdf(paste0(savePath, "Swarmplot of ", celltype, " in ", marker, " group.pdf"), height = 3, width = 4)
+    pdf(paste0(savePath, "Swarmplot of ", celltype, " in ", marker, " group.pdf"), height = 5, width = 4)
     print(p)
     dev.off()
 
@@ -997,13 +1060,23 @@ AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, groupsName, celltype,
 }
 
 ## Survival analysis for Phenotype associated label
-SurvivalForPhenoAssoLabel <- function(AbundanceDF1, AbundanceDF2, time, status, marker, savePath) {
-    AbundanceDF1 <- AbundanceDF1[, c(time, status)]
-    AbundanceDF2 <- AbundanceDF2[, c(time, status)]
-    GroupVec <- c(rep("High", nrow(AbundanceDF1)), rep("Low", nrow(AbundanceDF2)))
+SurvivalForPhenoAssoLabel <- function(AbundanceDF, GroupCol, time, status, marker, cutoffType = "best", savePath) {
+    AbundanceDF <- AbundanceDF[, c(GroupCol, time, status)]
 
-    plotdf <- rbind(AbundanceDF1, AbundanceDF2)
-    plotdf <- cbind(plotdf, GroupVec)
+    if (cutoffType == "best") {
+        cutpoint <- surv_cutpoint(data = AbundanceDF, time = time, event = status, variables = GroupCol)
+        cutpoint <- summary(cutpoint)$cutpoint
+    }
+    if (cutoffType == "mean") {
+        cutpoint <- mean(AbundanceDF[, GroupCol])
+    }
+    if (cutoffType == "median") {
+        cutpoint <- median(AbundanceDF[, GroupCol])
+    }
+
+    GroupVec <- ifelse(AbundanceDF[, GroupCol] >= cutpoint, "High Abundance", "Low Abundance")
+
+    plotdf <- cbind(AbundanceDF[, -1], GroupVec)
     plotdf <- as.data.frame(plotdf)
     colnames(plotdf) <- c(time, status, "Label")
 
@@ -1024,7 +1097,7 @@ SurvivalForPhenoAssoLabel <- function(AbundanceDF1, AbundanceDF2, time, status, 
         xlab = "Recurrence time"
     )
 
-    pdf(paste0(savePath, "Suvival analysis for phenotype-associated ROI of ", marker, "_1.pdf"), height = 6, width = 8)
+    pdf(paste0(savePath, "Suvival analysis for phenotype-associated PID of ", marker, ".pdf"), height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -1056,4 +1129,59 @@ TakeMeans <- function(df, valuecol, groupcol, pidcol) {
     returnDF[, 3] <- as.character(returnDF[, 3])
 
     return(returnDF)
+}
+
+## gene co-expression analysis
+CoexpAnalysis <- function(sce_, reclusMarkers, ReclusterName, interstType, savePath) {
+    sce__ <- sce_[, colData(sce_)[, ReclusterName] %in% interstType]
+
+    exp <- assay(sce__)
+    exp <- t(exp[reclusMarkers, ])
+
+    ## calculate the correlation
+    corMat <- rcorr(exp, type = "spearman")
+    rMat <- corMat[[1]]
+    pMat <- corMat[[3]]
+
+    rd <- c()
+    pd <- c()
+    marker1 <- c()
+    marker2 <- c()
+
+    for (i in 1:nrow(rMat)) {
+        for (j in i:ncol(rMat)) {
+            rd <- c(rd, rMat[i, j])
+            pd <- c(pd, pMat[i, j])
+            marker1 <- c(marker1, rownames(pMat)[i])
+            marker2 <- c(marker2, colnames(pMat)[j])
+        }
+    }
+
+    pd <- ifelse(is.na(pd), "0", pd)
+
+    rd <- as.character(cut(as.numeric(rd), breaks = c(-Inf, 0.2, 0.4, Inf), labels = c("< 0.2", "0.2 - 0.4", ">= 0.4")))
+    pd <- as.character(cut(as.numeric(pd), breaks = c(-Inf, 0.01, 0.05, Inf), labels = c("< 0.01", "0.01 - 0.05", ">= 0.05")))
+
+    plotdf <- as.data.frame(cbind("Marker1" = marker1, "Marker2" = marker2, "r" = as.factor(rd), "p" = as.factor(pd)))
+
+    ## heatmap
+    p <- quickcor(exp, method = "spearman", type = "upper", cor.test = T, cluster.type = "all") +
+        geom_square() +
+        geom_mark(r = NA, sig.thres = 0.05, size = 3.5, colour = "black") +
+        scale_fill_gradient2(high = "red", mid = "white", low = "blue") +
+        anno_link(plotdf, aes(color = p, size = r)) +
+        scale_size_manual(values = c(0.5, 1, 1.5, 2)) +
+        scale_color_manual(values = c("green", "blue", "orange")) +
+        guides(
+            fill = guide_colorbar(title = "correlation", order = 1),
+            size = guide_legend(title = "Spearman's r", order = 2),
+            color = guide_legend(title = "Spearman's p", order = 3),
+            linetype = "none"
+        )
+
+    pdf("test.pdf")
+    print(p)
+    dev.off()
+
+    return(NULL)
 }

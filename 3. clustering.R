@@ -182,3 +182,19 @@ markersList <- c(
 )
 
 MarkerHeatmap(clustercsv, markersList)
+
+
+## Density dotplot
+## To perform this function, should run 4.abundance.r first
+library(SingleCellExperiment)
+
+savePath <- "/mnt/data/lyx/IMC/analysis/clustering/"
+
+sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
+sce <- sce[,sce$Tissue == "IM"]
+rownames(sce)
+
+PlotDensityDotplot(sce, marker1 = "CD20", marker2 = "CD3", MajorType = "Lymphocyte", sampleSize = 50000, savePath)
+PlotDensityDotplot(sce,marker1 = "EpCAM",marker2 = "CD274",MajorType = 'Tumor',sampleSize = 50000, savePath)
+PlotDensityDotplot(sce,marker1 = "CD57",marker2 = "CD274",MajorType = 'Monocyte',sampleSize = 50000, savePath)
+PlotDensityDotplot(sce,marker1 = "CD57",marker2 = "CD279",MajorType = 'Monocyte',sampleSize = 50000, savePath)
