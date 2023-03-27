@@ -809,7 +809,7 @@ AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType
         RList[["sce"]] <- sce_
         if (numGroup == 2) {
             RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
-            RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff), ])
+            RList[["low_ROI"]] <- allROIs[!allROIs%in%c(RList[["high_ROI"]])]
         }
         if (numGroup == 3) {
             RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
@@ -1021,8 +1021,9 @@ TribleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, M
 }
 
 ## Swarm plot for high- and low- marker groups certain celltype
-AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2,AbundanceDF3, groupsName, celltype, marker, savePath) {
-    if (!(celltype %in% colnames(AbundanceDF1)) | !(celltype %in% colnames(AbundanceDF2)) | !(celltype %in% colnames(AbundanceDF3))) {
+AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2,AbundanceDF3, groupsName, celltype, marker, savePath, numGroup=3) {
+    if(numGroup==3){
+        if (!(celltype %in% colnames(AbundanceDF1)) | !(celltype %in% colnames(AbundanceDF2)) | !(celltype %in% colnames(AbundanceDF3))) {
         cat("Celltype ", celltype, " not in matrix!", "\n")
         return(NULL)
     }
@@ -1051,8 +1052,39 @@ AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2,AbundanceDF3, groupsNa
             comparisons = list(c("high","low"),c("low","none"),c("high","none")),
             method = "t.test"
         )
+    }
+    if(numGroup==2){
+        if (!(celltype %in% colnames(AbundanceDF1)) | !(celltype %in% colnames(AbundanceDF2))) {
+        cat("Celltype ", celltype, " not in matrix!", "\n")
+        return(NULL)
+    }
+    Counts1 <- AbundanceDF1[, celltype]
+    Counts2 <- AbundanceDF2[, celltype]
 
-    pdf(paste0(savePath, "Swarmplot of ", celltype, " in ", marker, " group.pdf"), height = 5, width = 4)
+    ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2))
+    CountsVec <- c(Counts1, Counts2)
+    GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)))
+
+    plotdf <- cbind(ROIsVec, CountsVec, GroupsVec)
+    plotdf <- as.data.frame(plotdf)
+    colnames(plotdf) <- c("ROI", "Count", "Group")
+
+    plotdf$Count <- as.numeric(plotdf$Count)
+
+    ## Swarm plot
+    p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group)) +
+        geom_violin(show.legend = FALSE) +
+        geom_jitter(aes(fill = Group)) +
+        theme_bw() +
+        labs(x = NULL) +
+        scale_color_manual(values = brewer.pal(2, "Paired")) +
+        stat_compare_means(
+            comparisons = list(c("high","low")),
+            method = "t.test"
+        )
+    }
+
+    pdf(paste0(savePath, "Swarmplot of ", celltype, " in ", marker, " group.pdf"), height = 4, width = 3)
     print(p)
     dev.off()
 
@@ -1183,5 +1215,10 @@ CoexpAnalysis <- function(sce_, reclusMarkers, ReclusterName, interstType, saveP
     print(p)
     dev.off()
 
+    return(NULL)
+}
+
+## Interaction difference barplot
+BarplotForInteraction <- function(ResultPath, celltype1, celltype2, ROIs1, ROIs2, savePath){
     return(NULL)
 }

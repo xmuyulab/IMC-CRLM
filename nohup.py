@@ -27,8 +27,8 @@ for tissue in ["IM","CT"]:
         kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata_.uns[('spatial_count_knn_'+str(n_neighbors))])
 
         cluster_labels = list(map(str,kmeans.labels_))
-        cluster_labels = list(map(lambda orig_string: 'kmeans' + '_' + orig_string, cluster_labels))
-        adata_.obs[('kmeans_knn_'+str(n_neighbors))] = cluster_labels
+        cluster_labels = list(map(lambda orig_string: 'CNP' + '_' + orig_string, cluster_labels))
+        adata_.obs[('CNP'+str(n_neighbors))] = cluster_labels
 
     #### save the clustering result
     savePath = "/mnt/data/lyx/IMC/analysis/spatial/"
@@ -37,10 +37,10 @@ for tissue in ["IM","CT"]:
     adata_.obs.to_csv(savePath+"cellular_neighbor_"+tissue+".csv")
 
     ## Permutation test
-    IDs = [x for x in Counter(adata_.obs["ID"]).keys()]
+    #IDs = [x for x in Counter(adata_.obs["ID"]).keys()]
 
-    multiprocess = True
-    if multiprocess:
-        multi_threads = 24
-        with Pool(multi_threads) as p:
-            p.starmap(PermutationTestMain, [(adata_, ID, 22,os.path.join(("/mnt/data/lyx/IMC/analysis/spatial/permutation_"+tissue),ID)) for ID in IDs])
+    #multiprocess = True
+    #if multiprocess:
+    #    multi_threads = 24
+    #    with Pool(multi_threads) as p:
+    #        p.starmap(PermutationTestMain, [(adata_, ID, 22,os.path.join(("/mnt/data/lyx/IMC/analysis/spatial/permutation_"+tissue),ID)) for ID in IDs])
