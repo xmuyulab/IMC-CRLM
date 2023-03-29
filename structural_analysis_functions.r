@@ -352,9 +352,12 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ReSubType = N
     colData(sce_)[, ReclusterName] <- fit$cluster
 
     ## T-sne visualization
-    if(nrow(exp)<=15000){sampleidx <- c(1:nrow(exp))}
-    else{sampleidx <- sample(1:nrow(exp), size = 15000, replace = F)} ### sample 15k cells to visualize}
-    
+    if (nrow(exp) <= 15000) {
+        sampleidx <- c(1:nrow(exp))
+    } else {
+        sampleidx <- sample(1:nrow(exp), size = 15000, replace = F)
+    } ### sample 15k cells to visualize}
+
     exp_sample <- exp[sampleidx, ]
     tsne <- Rtsne(exp_sample, dims = 2, PCA = F, verbose = F, max_iter = 500, check_duplicates = F)
     tsne_coor <- data.frame(tSNE1 = tsne$Y[, 1], tSNE2 = tsne$Y[, 2])
@@ -713,8 +716,10 @@ SurvivalForPhenoAssCell <- function(plotdf, savePath) {
 ## calcualte FC
 FCandPvalueCal <- function(mat, xCol, yCol, need.sample = FALSE) {
     if (need.sample) {
-        idx <- sample(1:nrow(mat), size = 2000, replace = FALSE)
-        mat <- mat[idx, ]
+        if (nrow(mat) > 2000) {
+            idx <- sample(1:nrow(mat), size = 2000, replace = FALSE)
+            mat <- mat[idx, ]
+        }
     }
     groups <- names(table(mat[, yCol]))
     groups <- as.character(sort(as.numeric(groups), decreasing = F))
@@ -789,7 +794,7 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
 }
 
 ## Assign new label
-AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType, cutoffType, cutoffValue = 10, numGroup=2, is.reuturnsce = FALSE) {
+AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType, cutoffType, cutoffValue = 10, numGroup = 2, is.reuturnsce = FALSE) {
     colData(sce_)[, phenoLabel] <- "Pheno_neg"
     colData(sce_)[, phenoLabel][which(colData(sce_)[, ReclusterName] %in% interstType)] <- "Pheno_pos"
 
@@ -809,12 +814,12 @@ AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType
         RList[["sce"]] <- sce_
         if (numGroup == 2) {
             RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
-            RList[["low_ROI"]] <- allROIs[!allROIs%in%c(RList[["high_ROI"]])]
+            RList[["low_ROI"]] <- allROIs[!allROIs %in% c(RList[["high_ROI"]])]
         }
         if (numGroup == 3) {
             RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
             RList[["low_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] < Cutoff & CountMat[, "Pheno_pos"] > 0), ])
-            RList[["none_ROI"]] <- allROIs[!allROIs%in%c(RList[["high_ROI"]],RList[["low_ROI"]])]
+            RList[["none_ROI"]] <- allROIs[!allROIs %in% c(RList[["high_ROI"]], RList[["low_ROI"]])]
         }
         return(RList)
     } else {
@@ -843,11 +848,11 @@ getResult <- function(ResultPath, ROIs, celltypes, p_threshold = 0.05) {
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.\\.", replacement = "+ ", x)
         })
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.",replacement = " ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.", replacement = " ", x)
         })
         rowname_ <- colname_
 
@@ -876,11 +881,11 @@ getResult <- function(ResultPath, ROIs, celltypes, p_threshold = 0.05) {
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.\\.", replacement = "+ ", x)
         })
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.",replacement = " ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.", replacement = " ", x)
         })
         rowname_ <- colname_
 
@@ -999,21 +1004,21 @@ TribleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, M
 
     colnames(plotdf) <- c("Celltype1", "Celltype2", "High-Interaction", "Low-Interaction", "None-Interaction")
 
-        plotdf2 <- cbind(rep(plotdf[, 1], times = 3), rep(plotdf[, 2], times = 3), c(plotdf[, 3], plotdf[, 4], plotdf[, 5]), rep(c(group1, group2, group3), each = nrow(plotdf)))
-        plotdf2 <- as.data.frame(plotdf2)
-        plotdf2[, 3] <- as.numeric(plotdf2[, 3])
-        colnames(plotdf2) <- c("Celltype1", "Celltype2", "Interaction", "Group")
+    plotdf2 <- cbind(rep(plotdf[, 1], times = 3), rep(plotdf[, 2], times = 3), c(plotdf[, 3], plotdf[, 4], plotdf[, 5]), rep(c(group1, group2, group3), each = nrow(plotdf)))
+    plotdf2 <- as.data.frame(plotdf2)
+    plotdf2[, 3] <- as.numeric(plotdf2[, 3])
+    colnames(plotdf2) <- c("Celltype1", "Celltype2", "Interaction", "Group")
 
-        p <- ggplot(plotdf2, aes(x = Celltype1, y = Celltype2)) +
-            geom_tile(aes(fill = Interaction)) +
-            scale_fill_gradient2(low = "#0000ff", high = "#ff0000", mid = "#ffffff") +
-            theme_bw() +
-            theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-            facet_grid(. ~ Group)
+    p <- ggplot(plotdf2, aes(x = Celltype1, y = Celltype2)) +
+        geom_tile(aes(fill = Interaction)) +
+        scale_fill_gradient2(low = "#0000ff", high = "#ff0000", mid = "#ffffff") +
+        theme_bw() +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+        facet_grid(. ~ Group)
 
-        pdf(savePath, height = 6, width = 18)
-        print(p)
-        dev.off()    
+    pdf(savePath, height = 6, width = 18)
+    print(p)
+    dev.off()
 
 
 
@@ -1021,67 +1026,67 @@ TribleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, M
 }
 
 ## Swarm plot for high- and low- marker groups certain celltype
-AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2,AbundanceDF3, groupsName, celltype, marker, savePath, numGroup=3) {
-    if(numGroup==3){
+AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, AbundanceDF3, groupsName, celltype, marker, savePath, numGroup = 3) {
+    if (numGroup == 3) {
         if (!(celltype %in% colnames(AbundanceDF1)) | !(celltype %in% colnames(AbundanceDF2)) | !(celltype %in% colnames(AbundanceDF3))) {
-        cat("Celltype ", celltype, " not in matrix!", "\n")
-        return(NULL)
+            cat("Celltype ", celltype, " not in matrix!", "\n")
+            return(NULL)
+        }
+        Counts1 <- AbundanceDF1[, celltype]
+        Counts2 <- AbundanceDF2[, celltype]
+        Counts3 <- AbundanceDF3[, celltype]
+
+        ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2), rownames(AbundanceDF3))
+        CountsVec <- c(Counts1, Counts2, Counts3)
+        GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)), rep(groupsName[3], length(Counts3)))
+
+        plotdf <- cbind(ROIsVec, CountsVec, GroupsVec)
+        plotdf <- as.data.frame(plotdf)
+        colnames(plotdf) <- c("ROI", "Count", "Group")
+
+        plotdf$Count <- as.numeric(plotdf$Count)
+
+        ## Swarm plot
+        p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group)) +
+            geom_violin(show.legend = FALSE) +
+            geom_jitter(aes(fill = Group)) +
+            theme_bw() +
+            labs(x = NULL) +
+            scale_color_manual(values = brewer.pal(3, "Paired")) +
+            stat_compare_means(
+                comparisons = list(c("high", "low"), c("low", "none"), c("high", "none")),
+                method = "t.test"
+            )
     }
-    Counts1 <- AbundanceDF1[, celltype]
-    Counts2 <- AbundanceDF2[, celltype]
-    Counts3 <- AbundanceDF3[, celltype]
-
-    ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2), rownames(AbundanceDF3))
-    CountsVec <- c(Counts1, Counts2, Counts3)
-    GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)), rep(groupsName[3], length(Counts3)))
-
-    plotdf <- cbind(ROIsVec, CountsVec, GroupsVec)
-    plotdf <- as.data.frame(plotdf)
-    colnames(plotdf) <- c("ROI", "Count", "Group")
-
-    plotdf$Count <- as.numeric(plotdf$Count)
-
-    ## Swarm plot
-    p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group)) +
-        geom_violin(show.legend = FALSE) +
-        geom_jitter(aes(fill = Group)) +
-        theme_bw() +
-        labs(x = NULL) +
-        scale_color_manual(values = brewer.pal(3, "Paired")) +
-        stat_compare_means(
-            comparisons = list(c("high","low"),c("low","none"),c("high","none")),
-            method = "t.test"
-        )
-    }
-    if(numGroup==2){
+    if (numGroup == 2) {
         if (!(celltype %in% colnames(AbundanceDF1)) | !(celltype %in% colnames(AbundanceDF2))) {
-        cat("Celltype ", celltype, " not in matrix!", "\n")
-        return(NULL)
-    }
-    Counts1 <- AbundanceDF1[, celltype]
-    Counts2 <- AbundanceDF2[, celltype]
+            cat("Celltype ", celltype, " not in matrix!", "\n")
+            return(NULL)
+        }
+        Counts1 <- AbundanceDF1[, celltype]
+        Counts2 <- AbundanceDF2[, celltype]
 
-    ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2))
-    CountsVec <- c(Counts1, Counts2)
-    GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)))
+        ROIsVec <- c(rownames(AbundanceDF1), rownames(AbundanceDF2))
+        CountsVec <- c(Counts1, Counts2)
+        GroupsVec <- c(rep(groupsName[1], length(Counts1)), rep(groupsName[2], length(Counts2)))
 
-    plotdf <- cbind(ROIsVec, CountsVec, GroupsVec)
-    plotdf <- as.data.frame(plotdf)
-    colnames(plotdf) <- c("ROI", "Count", "Group")
+        plotdf <- cbind(ROIsVec, CountsVec, GroupsVec)
+        plotdf <- as.data.frame(plotdf)
+        colnames(plotdf) <- c("ROI", "Count", "Group")
 
-    plotdf$Count <- as.numeric(plotdf$Count)
+        plotdf$Count <- as.numeric(plotdf$Count)
 
-    ## Swarm plot
-    p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group)) +
-        geom_violin(show.legend = FALSE) +
-        geom_jitter(aes(fill = Group)) +
-        theme_bw() +
-        labs(x = NULL) +
-        scale_color_manual(values = brewer.pal(2, "Paired")) +
-        stat_compare_means(
-            comparisons = list(c("high","low")),
-            method = "t.test"
-        )
+        ## Swarm plot
+        p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group)) +
+            geom_violin(show.legend = FALSE) +
+            geom_jitter(aes(fill = Group)) +
+            theme_bw() +
+            labs(x = NULL) +
+            scale_color_manual(values = brewer.pal(2, "Paired")) +
+            stat_compare_means(
+                comparisons = list(c("high", "low")),
+                method = "t.test"
+            )
     }
 
     pdf(paste0(savePath, "Swarmplot of ", celltype, " in ", marker, " group.pdf"), height = 4, width = 3)
@@ -1219,6 +1224,100 @@ CoexpAnalysis <- function(sce_, reclusMarkers, ReclusterName, interstType, saveP
 }
 
 ## Interaction difference barplot
-BarplotForInteraction <- function(ResultPath, celltype1, celltype2, ROIs1, ROIs2, savePath){
+BarplotForInteraction <- function(ResultPath, celltype1, celltype2, ROIs1, ROIs2, savePath) {
+    return(NULL)
+}
+
+## Calculate celltypes difference in different clinical groups
+HeatmapForMarkersInGroups <- function(sce, markers, groupCol, savePath) {
+    celltypes <- names(table(sce$SubType))
+    celltypes <- celltypes[1:(length(celltypes) - 1)]
+
+    MarkerVec <- c()
+    TypeVec <- c()
+    PVec <- c()
+    FCVec <- c()
+
+    i <- 1
+    for (interstSubType in celltypes) {
+        sce_ <- sce[, sce$SubType %in% interstSubType]
+        mat <- as.data.frame(t(assay(sce_)[markers, ]))
+        mat$classLabel <- colData(sce_)[, groupCol]
+        FCDF <- FCandPvalueCal(mat, xCol = c(1, length(markers)), yCol = (length(markers) + 1), need.sample = TRUE)
+
+
+        FCVec <- c(FCVec, as.numeric(FCDF[, 2]))
+        PVec <- c(PVec, as.numeric(FCDF[, 3]))
+        i <- i + 1
+    }
+
+    MarkerVec <- rep(markers, times = length(celltypes))
+    TypeVec <- rep(celltypes, each = length(markers))
+
+    plotdf <- matrix(data = NA, nrow = length(MarkerVec), ncol = 4)
+    plotdf <- as.data.frame(plotdf)
+    plotdf[, 1] <- MarkerVec
+    plotdf[, 2] <- TypeVec
+    plotdf[, 4] <- ifelse(FCVec != 0, log2(FCVec), 0)
+
+    colnames(plotdf) <- c("Marker", "Subtype", "Pvalue", "FoldChange")
+
+    if (adjust.p) {
+        plotdf$Qvalue <- p.adjust(PVec, method = "BH")
+        plotdf$Qlabel <- cut(plotdf$Qvalue, breaks = c(min(plotdf$Qvalue), 0.001, 0.01, 0.05), labels = c(8, 6, 4, 2))
+        plotdf$Qlabel <- as.factor(plotdf$Qlabel)
+    }
+    plotdf$Plabel <- cut(plotdf$Pvalue, breaks = c(min(plotdf$Pvalue), 0.001, 0.01, 0.05), labels = c(8, 6, 4, 2))
+    plotdf$Plabel <- as.factor(plotdf$Plabel)
+
+    p <- ggplot(data = plotdf, aes(x = Subtype, y = Marker)) +
+        geom_point(aes(size = Qlabel, fill = FoldChange), shape = 22, color = "grey80") +
+        scale_fill_gradient2(low = "#445393", high = "#EE2627", mid = "white") +
+        theme_bw() +
+        theme(
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            plot.title = element_text(hjust = 0.5, size = 12),
+            axis.text.y = element_text(size = 12, color = "black"),
+            axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0.1, color = "black", size = 10),
+            axis.ticks = element_blank(),
+            legend.key.size = unit(0.15, "inches")
+        ) +
+        labs(x = "", y = NULL) +
+        scale_size_discrete(range = c(2, 8))
+    pdf(paste0(savePath, "alltypes differential markers in relapse.pdf"), width = 8, height = 6)
+    print(p)
+    dev.off()
+
+    ## Heatmap
+    if (F) {
+        pMat <- matrix(data = 0, nrow = length(markers), ncol = length(celltypes))
+        rownames(pMat) <- markers
+        colnames(pMat) <- celltypes
+
+        FCMat <- pMat
+
+        i <- 1
+        for (interstSubType in celltypes) {
+            sce_ <- sce[, sce$SubType %in% interstSubType]
+            mat <- as.data.frame(t(assay(sce_)[markers, ]))
+            mat$classLabel <- colData(sce_)[, groupCol]
+            FCDF <- FCandPvalueCal(mat, xCol = c(1, length(markers)), yCol = (length(markers) + 1), need.sample = TRUE)
+
+            FCMat[, i] <- as.numeric(FCDF[, 2])
+            pMat[, i] <- as.numeric(FCDF[, 3])
+            i <- i + 1
+        }
+        pMat <- as.data.frame(pMat)
+        FCMat <- as.data.frame(FCMat)
+
+        FCMat <- apply(FCMat, MARGIN = 1, function(x) {
+            return(ifelse(x != 0, log2(x), 0))
+        })
+        pMat <- apply(pMat, MARGIN = 1, function(x) {
+            return(ifelse(x != 0, (-log10(x + 0.0001)), 0))
+        })
+    }
+
     return(NULL)
 }

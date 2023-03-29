@@ -15,7 +15,7 @@ source("/home/lyx/project/IMC/clustering_functions.r")
 source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
 
 ## Loading protein expression matrix and meta data
-raw_csv_dir <- "/mnt/data/lyx/IMC/IMCell_Output/protein/"
+raw_csv_dir <- "/mnt/data/lyx/IMC/IMCell_Output/denoise_result"
 meta_csv_dir <- "/mnt/data/lyx/IMC/IMC_CRC_QC.csv"
 
 total.res2.qc <- load_RawData(raw_csv_dir, meta_csv_dir)
@@ -23,7 +23,7 @@ print(dim(total.res2.qc))
 total.res2.qcBack <- total.res2.qc
 
 ## Load Marker
-panel <- read.csv("/mnt/data/lyx/IMC/IMC_CRC_panel.csv", stringsAsFactors = FALSE)
+panel <- read.csv("/mnt/data/lyx/IMC/IMC_CRC_panel_v2.csv", stringsAsFactors = FALSE)
 MarkerList <- load_Marker(panel)
 
 ## data normalization
@@ -31,8 +31,8 @@ savePath <- "/mnt/data/lyx/IMC/analysis/clustering/"
 
 colnames(total.res2.qc)[which(colnames(total.res2.qc) == "sample")] <- "filelist"
 
-total.res2.qc.norm <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = FALSE, norm_method = "0-1")
-total.res2.qc.norm.asin <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = TRUE, norm_method = "0-1")
+total.res2.qc.norm <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = FALSE, is.Batch = T, norm_method = "0-1")
+total.res2.qc.norm.asin <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = TRUE, is.Batch = T, norm_method = "0-1")
 
 saveRDS(total.res2.qc, paste0(savePath, "total.res2.qc.rds"))
 saveRDS(total.res2.qc.norm, paste0(savePath, "total.res2.qc.norm.rds"))
@@ -45,13 +45,16 @@ total.res2.qc.norm.asin <- readRDS(paste0(savePath, "total.res2.qc.norm.asin.rds
 # Flowsom clustering
 
 ## norm, Identification markers
-markers <- MarkerList[["Iden_Marker"]]
+markers <- MarkerList[["Major_Marker"]]
 print((markers))
 
 ### paralle
 if (F) {
     library(parallel)
+
     perFunc <- function(list_) {
+        source("/home/lyx/project/IMC/clustering_functions.r")
+        source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
         total.res2.qc <- list_[[1]]
         total.res2.qc.norm <- list_[[2]]
         markers <- list_[[3]]
@@ -61,7 +64,7 @@ if (F) {
         cat("Performing phenograph clustering with phenok = ", phenok, "\n")
         ## norm
         norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, markers,
-            phenographOnly = F, xdim = 100, ydim = 100, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok
+            phenographOnly = F, xdim = 100, ydim = 100, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok, using.kmenas = T
         )
         saveRDS(norm_exp, paste0(savePath, "qc5_norm_Idenmarker_norm_exp_k", phenok, ".rds"))
         pdf(paste0(savePath, "qc5_norm_Idenmarker_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
@@ -70,7 +73,7 @@ if (F) {
 
         ### norm.arcsin
         norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm.asin, markers,
-            phenographOnly = F, xdim = 100, ydim = 100, method = "qc5_norm_asin_Idenmarke", savePath = savePath, phenok = phenok
+            phenographOnly = F, xdim = 100, ydim = 100, method = "qc5_norm_asin_Idenmarke", savePath = savePath, phenok = phenok, using.kmenas = T
         )
         saveRDS(norm_exp, paste0(savePath, "qc5_norm_asin_Idenmarke_norm_exp_k", phenok, ".rds"))
         pdf(paste0(savePath, "qc5_norm_asin_Idenmarke_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
@@ -79,28 +82,29 @@ if (F) {
 
         return(NULL)
     }
-    phenoks <- c(10, 15, 20, 25, 30, 40)
+    phenoks <- c(20, 10, 5, 1, 0.5, 0.1, 0.01)
     targets <- lapply(phenoks, FUN = function(x) {
         return(list(total.res2.qc, total.res2.qc.norm, markers, savePath, x))
     })
-    cl <- makeCluster(8)
-    results <- parLapply(cl, list_, perFunc)
+    cl <- makeCluster(7)
+    results <- parLapply(cl, targets, perFunc)
     stopCluster(cl)
 }
 
 ## only phenograph
-### norm
-FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, phenographOnly = T, markers = markers, k = 100, method = "qc5_norm_marker20_pheno100", savePath)
-### norm.arcsin
-FlowSOM_clustering(total.res2.qc, total.res2.qc.norm.asin, phenographOnly = T, markers = markers, k = 100, method = "qc5_norm_asin_marker20_pheno100", savePath)
+if (F) {
+    ### norm
+    FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, phenographOnly = T, markers = markers, k = 100, method = "qc5_norm_marker20_pheno100", savePath)
+    ### norm.arcsin
+    FlowSOM_clustering(total.res2.qc, total.res2.qc.norm.asin, phenographOnly = T, markers = markers, k = 100, method = "qc5_norm_asin_marker20_pheno100", savePath)
+    norm_exp <- readRDS(paste0(savePath, "qc5_norm_Idenmarker_norm_exp_k20.rds"))
+    pdf(paste0(savePath, "qc5_norm_Idenmarker_norm_exp_k20.pdf"), width = 15, height = 12)
+    plotHeatmap(norm_exp, marker_total = markers, clustercol = "flowsom100pheno15")
+    dev.off()
+}
 
 
-norm_exp <- readRDS(paste0(savePath, "qc5_norm_Idenmarker_norm_exp_k20.rds"))
-pdf(paste0(savePath, "qc5_norm_Idenmarker_norm_exp_k20.pdf"), width = 15, height = 12)
-plotHeatmap(norm_exp, marker_total = markers, clustercol = "flowsom100pheno15")
-dev.off()
-
-plotFeaturePlot("/mnt/data/lyx/IMC/analysis/clustering/qc5_norm_Idenmarker_flowsom_pheno_tsne_k25.csv", markers = markers, savePath = "/mnt/data/lyx/IMC/analysis/clustering/")
+# plotFeaturePlot("/mnt/data/lyx/IMC/analysis/clustering/qc5_norm_Idenmarker_flowsom_pheno_tsne_k25.csv", markers = markers, savePath = "/mnt/data/lyx/IMC/analysis/clustering/")
 
 # Annotation
 ### Tumor: EPCAM
@@ -108,47 +112,41 @@ plotFeaturePlot("/mnt/data/lyx/IMC/analysis/clustering/qc5_norm_Idenmarker_flows
 ### Stromal: Collagen I
 ### Macrophage: CD68
 ### Monocyte: CD14
+### Unknown
 
 MajorTypeList <- c(
-    "Monocyte", "Monocyte", "Monocyte", "Macrophage", "Tumor",
-    "Tumor", "Tumor", "Monocyte", "Tumor", "Monocyte",
-    "Lymphocyte", "Monocyte", "Tumor", "Monocyte", "Stromal",
-    "Macrophage", "Stromal", "Tumor", "Macrophage", "Monocyte",
-    "Macrophage", "Monocyte", "Stromal", "Tumor", "Lymphocyte",
-    "Lymphocyte", "Lymphocyte"
+    "Lymphocyte", "Lymphocyte", "Stromal", "Tumor", "Tumor",
+    "Tumor", "Macrophage", "Monocyte", "Monocyte", "Stromal",
+    "Unknown", "Tumor", "Stromal", "Tumor", "Macrophage",
+    "Monocyte", "Stromal", "Macrophage", "Monocyte", "Monocyte",
+    "Macrophage", "Lymphocyte", "Lymphocyte", "Lymphocyte"
 )
 
 ## Lymphocyte
-## T cell: CD3
-## B cell: CD20
-## NK: CD57
+## 17: B cell
+## 8: DPT
+## 1：NK
 
 ## Monocyte
-## 1:  (Mono6 - Multi)
-## 2: CD14+ CD16 CD11chi CLEC9A (Mono1 - CD11chi)
-## 3: CD14+ CD16 CD11c CLEC9A (Mono2 - Classic Monocyte)
-## 8: CD14+ CD16 CD11c+ CLEC9A+ (Mono3 - cDC1)
-## 10: CD14+ CD16 CD11c CLEC9A CD169+ (Mono4 - SIGLEC1)
-## 12: CD14+ CD16 CD11c CLEC9A (Mono2 - Classic Monocyte)
-## 14: CD14+ CD16 CD11c CLEC9A (Mono2 - Classic Monocyte)
-## 20: CD14+ CD16+ CD11c CLEC9A (Mono5 - Intermediate Monocyte)
-## 22: CD14+ CD16 CD11c CLEC9A (Mono2 - Classic Monocyte)
+## 3: CD14+ CD16+ (Mono_Intermediate)
+## 4: CD14+ CLEC9A (Mono_CLEC9A)
+## 5: CD14+ SIGLEC1 (Mono_SIGLEC1)
+## 6: CD14+ (Mono_Classic)
+## 11: CD14+ CD11c (Mono_CD11c)
+## 14: CD14+ CD11c (Mono_CD11c)
 
 ## Macrophage
-## 4: CD68+ CD14+ CD16+ CD11c CD11b CD163+ CLEC9A HLADR+ (Macro1 - Multi)
-## 16: CD68+ CD14 CD16 CD11c CD11b CD163 CLEC9A HLADR+ (Macro2 - HLADR)
-## 19: CD68+ CD14 CD16 CD11c CD11b+ CD163 CLEC9A HLADR (Macro3 - CD11b)
-## 21: CD68+ CD14+ CD16 CD11c CD11b CD163 CLEC9A HLADR (Macro4 - CD14+)
+## 2: CD68+ CD14+ CD16+ CD163+ HLADR+ (Macro_Multi)
+## 15: CD68- CD14 CD16 CD11c CD11b CD163 CLEC9A HLADR+ (Macro_HLADR)
+## 21: CD68+ CD11b (Macro_CD11b)
 
-## Mixture: CD14, CD11c, VEGF, CD4, FAP, FoxP3, CD57, CLEC9A, CD169hi
 
 MinorTypeList <- c(
-    "Mono_Multi", "Mono_CD11c", "Mono_Classic", "Macro_Multi", "TC_TIGHT",
-    "TC_EPCAM", "TC_CAIX", "Mono_cDC_ITGAX", "TC_COLLAGEN", "Mono_SIGLEC1",
-    "NK", "Mono_Classic", "TC_Ki67", "Mono_Classic", "SC_Vimentin",
-    "Macro_HLADR", "SC_VEGF", "TC_HAVR2", "Macro_CD11b", "Mono_Intermediate",
-    "Macro_CD14", "Mono_Classic", "SC_FAP", "TC_VEGF", "CD4T",
-    "CD8T", "B"
+    "Treg", "NK", "SC_VEGF", "TC_CAIX", "TC_VEGF",
+    "TC_Ki67", "Macro_Multi", "Mono_CD11c", "cDC1", "SC_aSMA",
+    "Unknown", "TC_EpCAM", "SC_FAP", "TC_COLLAGEN", "Macro_CD11b",
+    "Mono_CD169", "SC_COLLAGEN", "Macro_Vimentin", "Mono_Intermediate", "Mono_Classic",
+    "Macro_CD14", "CD4T", "CD8T", "B"
 )
 
 # c(
@@ -157,44 +155,373 @@ MinorTypeList <- c(
 #    "11", "12", "13", "14", "15",
 #    "16", "17", "18", "19", "20",
 #    "21", "22", "23", "24", "25",
-#    "26", "27", "28", "29"
+#    "26", "27", "28", "29","30"
 # )
 
+k <- 20
 Annotate(
-    "/mnt/data/lyx/IMC/analysis/clustering/qc5_norm_Idenmarker_flowsom_pheno_tsne_k20.csv", "/mnt/data/lyx/IMC/analysis/clustering/qc5_norm_Idenmarker_flowsom_pheno_k20.csv",
+    paste0(savePath, "qc5_norm_Idenmarker_flowsom_pheno_tsne_k", k, ".csv"), paste0(savePath, "qc5_norm_Idenmarker_flowsom_pheno_k", k, ".csv"),
     MajorTypeList, MinorTypeList, "/mnt/data/lyx/IMC/analysis/clustering/"
 )
 
-clustercsv <- readRDS("/mnt/data/lyx/IMC/analysis/clustering/annotate_allcells.rds")
-write.csv(clustercsv, file = "/mnt/data/lyx/IMC/analysis/clustering/annotate_allcells.csv", row.names = FALSE) ## save annotate result
+clustercsv <- readRDS(paste0(savePath, "annotate_allcells.rds"))
+write.csv(clustercsv, file = paste0(savePath, "annotate_allcells.csv"), row.names = FALSE) ## save annotate result
 
-TsnecsvPath <- read.csv("/mnt/data/lyx/IMC/analysis/clustering/qc5_norm_Idenmarker_flowsom_pheno_tsne_k20.csv")
+TsnecsvPath <- read.csv(paste0(savePath, "qc5_norm_Idenmarker_flowsom_pheno_tsne_k", k, ".csv"))
 head(TsnecsvPath, 2)
 table(TsnecsvPath$metacluster)
 
 markersList <- MarkerList[["All_Marker"]]
 markersList <- c(
-    "CD45", "CD20", "CD3", "CD8a", "CD4", "TIGIT", "FoxP3", "CD57", "CD127", "CD366", ## Lymphocyte
+    "CD45", "CD20", "CD3", "CD8a", "CD4", "FoxP3", "CD57", ## Lymphocyte
     "HLADR", "CD68", "CD14", "CD11c", "CD11b", "CD16", "CLEC9A", "CD169", "CD163", ## Myeloid
     "CollagenI", "Vimentin", "AlphaSMA", "FAP", ## Stromal
-    "EpCAM", "Ki67", "VEGF", "CAIX", "HK2", ## Tumor
-    "FASN", "CD80", "CD274", "PRPS1", "CD279", "GLUT1", "CD27" ## Other
+    "EpCAM", ## Tumor
+    "Ki67", "HK2", "FASN", "PRPS1", "GLUT1", ## Cell grouth
+    "VEGF", "CAIX", ## Hypoxia
+    "CD127", "CD27", "CD80", ## Immuno-activation
+    "CD274", "CD279", "TIGIT", "CD366" ## Immuno-checkpoint
 )
 
-MarkerHeatmap(clustercsv, markersList)
+MarkerHeatmap(clustercsv, markersList, savePath)
+
+## Clustering assement
+clustercsv <- readRDS(paste0(savePath, "annotate_allcells.rds"))
+markers <- MarkerList[["Iden_Marker"]]
+clusterCol <- "SubType"
+
+AssessClustering(clustercsv, markers = markers, clusterCol = clusterCol, tFraction = 0.85, sampleSize = 50000, savePath = savePath)
 
 
-## Density dotplot
-## To perform this function, should run 4.abundance.r first
-library(SingleCellExperiment)
-
+## Two-run clustering
 savePath <- "/mnt/data/lyx/IMC/analysis/clustering/"
 
-sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
-sce <- sce[,sce$Tissue == "IM"]
-rownames(sce)
+total.res2.qc <- readRDS(paste0(savePath, "total.res2.qc.rds"))
+total.res2.qc.norm <- readRDS(paste0(savePath, "total.res2.qc.norm.rds"))
+total.res2.qc.norm.asin <- readRDS(paste0(savePath, "total.res2.qc.norm.asin.rds"))
 
-PlotDensityDotplot(sce, marker1 = "CD20", marker2 = "CD3", MajorType = "Lymphocyte", sampleSize = 50000, savePath)
-PlotDensityDotplot(sce,marker1 = "EpCAM",marker2 = "CD274",MajorType = 'Tumor',sampleSize = 50000, savePath)
-PlotDensityDotplot(sce,marker1 = "CD57",marker2 = "CD274",MajorType = 'Monocyte',sampleSize = 50000, savePath)
-PlotDensityDotplot(sce,marker1 = "CD57",marker2 = "CD279",MajorType = 'Monocyte',sampleSize = 50000, savePath)
+dim(total.res2.qc.norm)
+colnames(total.res2.qc.norm)
+
+## Major clustering
+## Load Marker
+panel <- read.csv("/mnt/data/lyx/IMC/IMC_CRC_panel_v2.csv", stringsAsFactors = FALSE)
+MarkerList <- load_Marker(panel)
+
+markers <- MarkerList[["Major_Marker"]]
+print((markers))
+
+### paralle
+if (T) {
+    library(parallel)
+
+    perFunc <- function(list_) {
+        source("/home/lyx/project/IMC/clustering_functions.r")
+        source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
+        total.res2.qc <- list_[[1]]
+        total.res2.qc.norm <- list_[[2]]
+        total.res2.qc.norm.asin <- list_[[3]]
+        markers <- list_[[4]]
+        Type <- list_[[5]]
+        savePath <- list_[[6]]
+        phenok <- list_[[7]]
+
+        cat("Performing phenograph clustering with phenok = ", phenok, "\n")
+        ## norm
+        norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, markers,
+            phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok,
+        )
+        # saveRDS(norm_exp, paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".rds"))
+        pdf(paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+        plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+        dev.off()
+
+        ### norm.arcsin
+        norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm.asin, markers,
+            phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = "qc5_norm_asin_Idenmarke", savePath = savePath, phenok = phenok
+        )
+        # saveRDS(norm_exp, paste0(savePath, Type, "_qc5_norm_asin_Idenmarke_norm_exp_k", phenok, ".rds"))
+        pdf(paste0(savePath, Type, "_qc5_norm_asin_Idenmarke_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+        plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+        dev.off()
+
+        return(NULL)
+    }
+    phenoks <- c(30, 20, 15, 10, 5)
+    Type <- "Major"
+    targets <- lapply(phenoks, FUN = function(x) {
+        return(list(total.res2.qc, total.res2.qc.norm, total.res2.qc.norm.asin, markers, Type, savePath, x))
+    })
+    cl <- makeCluster(32)
+    results <- parLapply(cl, targets, perFunc)
+    stopCluster(cl)
+}
+
+## Major annotation
+bestnorm_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Major_qc5_norm_Idenmarker_flowsom_pheno_k10.csv"
+bestnorm_exp <- read.csv(bestnorm_expPath)
+table(bestnorm_exp$Major_flowsom100pheno15)
+
+MajorTypeList <- c(
+    "Tumor", "UNKNOWN", "Tumor", "Lymphocyte", "UNKNOWN",
+    "UNKNOWN", "UNKNOWN", "Myeloid", "Tumor", "Myeloid",
+    "Myeloid", "UNKNOWN", "Myeloid", "UNKNOWN", "Tumor",
+    "UNKNOWN", "Myeloid", "Myeloid", "UNKNOWN", "Stromal",
+    "UNKNOWN", "Tumor", "UNKNOWN", "Stromal", "Lymphocyte",
+    "Myeloid", "Stromal", "UNKNOWN", "Lymphocyte", "Myeloid"
+)
+bestnorm_exp$MajorType <- NA
+clusterids <- as.numeric(names(table(bestnorm_exp$Major_flowsom100pheno15)))
+
+for (clusterid in clusterids) {
+    bestnorm_exp[bestnorm_exp$Major_flowsom100pheno15 %in% clusterid, ]$MajorType <- MajorTypeList[clusterid]
+}
+table(bestnorm_exp$MajorType)
+bestnorm_exp$CellID <- as.character(1:nrow(bestnorm_exp))
+saveRDS(bestnorm_exp, "/mnt/data/lyx/IMC/analysis/clustering/Major_qc5_norm_Idenmarker_flowsom_pheno_k15.rds")
+
+MajorTypes <- names(table(bestnorm_exp$MajorType))
+
+## Minor clustering
+cat("Loading Major annotation", "\n")
+bestnorm_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Major_qc5_norm_Idenmarker_flowsom_pheno_k15.rds"
+bestnorm_exp <- readRDS(bestnorm_expPath)
+bestnorm_exp$SubType <- "UNKNOWN"
+
+### paralle
+if (T) {
+    library(parallel)
+
+    perFunc <- function(list_) {
+        source("/home/lyx/project/IMC/clustering_functions.r")
+        source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
+        total.res2.qc <- list_[[1]]
+        total.res2.qc.norm <- list_[[2]]
+        total.res2.qc.norm.asin <- list_[[3]]
+        markers <- list_[[4]]
+        Type <- list_[[5]]
+        savePath <- list_[[6]]
+        phenok <- list_[[7]]
+
+        cat("Performing phenograph clustering with phenok = ", phenok, "\n")
+        ## norm
+        norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm, markers,
+            phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok
+        )
+        # saveRDS(norm_exp, paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".rds"))
+        pdf(paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+        plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+        dev.off()
+
+        ### norm.arcsin
+        norm_exp <- FlowSOM_clustering(total.res2.qc, total.res2.qc.norm.asin, markers,
+            phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = "qc5_norm_asin_Idenmarke", savePath = savePath, phenok = phenok
+        )
+        # saveRDS(norm_exp, paste0(savePath, Type, "_qc5_norm_asin_Idenmarke_norm_exp_k", phenok, ".rds"))
+        pdf(paste0(savePath, Type, "_qc5_norm_asin_Idenmarke_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+        plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+        dev.off()
+
+        return(NULL)
+    }
+
+    ## form targets to multiple precess
+    cat("Form the multi-process targets", "\n")
+    phenoks <- c(20, 15, 10, 5)
+    Type <- c("Lymphocyte", "Myeloid", "Stromal", "Tumor", "Unknown")
+
+    targets <- list()
+    z <- 1
+    for (i in 1:length(Type)) {
+        idx <- bestnorm_exp$MajorType %in% Type[i]
+        for (j in phenoks) {
+            cat("Precessing ", Type[i], " of k=", j, "\n")
+            targets[[z]] <- list(bestnorm_exp[idx, ], bestnorm_exp[idx, ], total.res2.qc.norm.asin[idx, ], MarkerList[[i + 2]], Type[i], savePath, j)()
+            z <- z + 1
+        }
+    }
+    cat("Form the multi-process targets done.", "\n")
+    cl <- makeCluster(32)
+    cat("Start multi-process.", "\n")
+    results <- parLapply(cl, targets, perFunc)
+    stopCluster(cl)
+}
+
+############### Lymphocyte
+Lymnorm_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Lymphocyte_qc5_norm_Idenmarker_flowsom_pheno_k25.csv"
+Lymnorm_exp <- read.csv(Lymnorm_expPath)
+
+dim(Lymnorm_exp)
+colnames(Lymnorm_exp)
+Lymnorm_exp$SubType <- NA
+
+LymphTypeList <- c(
+    "CD4T", "CD8T", "CD8T", "CD4T", "B",
+    "CD4T", "CD8T", "NK", "B", "CD366+ CD4T",
+    "UNKNOWN", "CD4T", "CD4T", "CD366+ CD4T", "UNKNOWN",
+    "UNKNOWN", "UNKNOWN", "UNKNOWN", "Treg", "UNKNOWN",
+    "Treg", "Treg", "NK"
+)
+
+clusterids <- as.numeric(names(table(Lymnorm_exp$Lymphocyte_flowsom100pheno15)))
+for (clusterid in clusterids) {
+    Lymnorm_exp[Lymnorm_exp$Lymphocyte_flowsom100pheno15 %in% clusterid, ]$SubType <- LymphTypeList[clusterid]
+}
+table(Lymnorm_exp$SubType)
+colnames(Lymnorm_exp)
+bestnorm_exp[match(Lymnorm_exp$CellID, bestnorm_exp$CellID), ]$SubType <- Lymnorm_exp$SubType
+
+############ Myeloid
+Myeloid_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Myeloid_qc5_norm_Idenmarker_flowsom_pheno_k20.csv"
+Myeloid_exp <- read.csv(Myeloid_expPath)
+
+dim(Myeloid_exp)
+colnames(Myeloid_exp)
+Myeloid_exp$SubType <- NA
+
+MyeloidTypeList <- c(
+    "Macro_CD163", "Macro_HLADR", "UNKNOWN", "Mono_Classic", "CLEC9A+ DC",
+    "Mono_Classic", "Macro_CD163", "Mono_Classic", "Mono_CD11c", "CD80+ DC",
+    "Mono_CD11c", "Mono_Classic", "CD80+ DC", "Mono_Intermediate", "UNKNOWN",
+    "Macro_CD163", "Mono_Intermediate", "Mono_Intermediate", "UNKNOWN", "Mono_Classic",
+    "Macro_CD163", "UNKNOWN", "Macro_CD169", "Macro_CD11b", "UNKNOWN",
+    "CD80+ DC", "UNKNOWN"
+)
+
+clusterids <- as.numeric(names(table(Myeloid_exp$Myeloid_flowsom100pheno15)))
+for (clusterid in clusterids) {
+    Myeloid_exp[Myeloid_exp$Myeloid_flowsom100pheno15 %in% clusterid, ]$SubType <- MyeloidTypeList[clusterid]
+}
+table(Myeloid_exp$SubType)
+colnames(Myeloid_exp)
+bestnorm_exp[match(Myeloid_exp$CellID, bestnorm_exp$CellID), ]$SubType <- Myeloid_exp$SubType
+table(bestnorm_exp$SubType)
+
+############ Stromal
+Stromal_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Stromal_qc5_norm_Idenmarker_flowsom_pheno_k20.csv"
+Stromal_exp <- read.csv(Stromal_expPath)
+
+dim(Stromal_exp)
+colnames(Stromal_exp)
+Stromal_exp$SubType <- NA
+
+StromalTypeList <- c(
+    "SC_aSMA", "SC_aSMA", "SC_FAP", "SC_COLLAGEN", "SC_COLLAGEN",
+    "SC_COLLAGEN", "SC_aSMA", "UNKNOWN", "SC_COLLAGEN", "SC_Vimentin",
+    "UNKNOWN", "SC_COLLAGEN", "UNKNOWN", "UNKNOWN", "UNKNOWN",
+    "SC_COLLAGEN", "SC_COLLAGEN", "SC_Vimentin", "SC_COLLAGEN", "UNKNOWN",
+    "SC_Vimentin", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN",
+    "UNKNOWN", "UNKNOWN"
+)
+clusterids <- as.numeric(names(table(Stromal_exp$Stromal_flowsom100pheno15)))
+for (clusterid in clusterids) {
+    Stromal_exp[Stromal_exp$Stromal_flowsom100pheno15 %in% clusterid, ]$SubType <- StromalTypeList[clusterid]
+}
+table(Stromal_exp$SubType)
+colnames(Stromal_exp)
+bestnorm_exp[match(Stromal_exp$CellID, bestnorm_exp$CellID), ]$SubType <- Stromal_exp$SubType
+table(bestnorm_exp$SubType)
+
+############ Tumor
+Tumor_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Tumor_qc5_norm_Idenmarker_flowsom_pheno_k10.csv"
+Tumor_exp <- read.csv(Tumor_expPath)
+
+dim(Tumor_exp)
+colnames(Tumor_exp)
+Tumor_exp$SubType <- NA
+
+TumorTypeList <- c(
+    "UNKNOWN", "UNKNOWN", "TC_CAIX", "TC_CAIX", "TC_CAIX",
+    "TC_CAIX", "TC_CAIX", "TC_CAIX", "TC_CAIX", "TC_VEGF",
+    "TC_EpCAM", "UNKNOWN", "UNKNOWN", "TC_VEGF", "TC_EpCAM",
+    "TC_EpCAM", "TC_EpCAM", "TC_Ki67", "TC_EpCAM", "TC_VEGF",
+    "TC_EpCAM", "TC_EpCAM", "TC_EpCAM", "TC_Ki67", "TC_VEGF",
+    "TC_EpCAM", "TC_EpCAM", "TC_Ki67", "TC_VEGF", "TC_Ki67",
+    "TC_Ki67", "UNKNOWN", "UNKNOWN", "TC_Ki67"
+)
+
+clusterids <- as.numeric(names(table(Tumor_exp$Tumor_flowsom100pheno15)))
+for (clusterid in clusterids) {
+    Tumor_exp[Tumor_exp$Tumor_flowsom100pheno15 %in% clusterid, ]$SubType <- TumorTypeList[clusterid]
+}
+table(Tumor_exp$SubType)
+colnames(Tumor_exp)
+bestnorm_exp[match(Tumor_exp$CellID, bestnorm_exp$CellID), ]$SubType <- Tumor_exp$SubType
+table(bestnorm_exp$SubType)
+table(bestnorm_exp$MajorType)
+
+bestnorm_exp[which(bestnorm_exp$SubType == "UNKNOWN"), ]$MajorType <- "UNKNOWN"
+saveRDS(bestnorm_exp, paste0(savePath, "annotate_allcells.rds"))
+
+### Further clustering Unknown cells
+bestnorm_exp <- readRDS(paste0(savePath, "annotate_allcells.rds"))
+colnames(bestnorm_exp)
+table(bestnorm_exp$MajorType)
+table(bestnorm_exp$SubType)
+
+## clustering Unknown cells
+markers <- unique(c(MarkerList[[2]], MarkerList[[3]], MarkerList[[4]], MarkerList[[5]], MarkerList[[6]]))
+Type <- "UNKNOWN"
+
+Unknown_exp <- bestnorm_exp[which(bestnorm_exp$MajorType == "UNKNOWN"), ]
+for (phenok in c(10, 20, 30, 40)) {
+    norm_exp <- FlowSOM_clustering(Unknown_exp, Unknown_exp[, markers], markers,
+        phenographOnly = F, xdim = 100, ydim = 100, Type = Type, method = paste0("qc5_norm_Idenmarker"), savePath = savePath, phenok = phenok,
+    )
+    p <- plotHeatmap(norm_exp, marker_total = markers, clustercol = paste0(Type, "_flowsom100pheno15"))
+    pdf(paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".pdf"), width = 15, height = 12)
+    print(p)
+    dev.off()
+}
+
+# saveRDS(norm_exp, paste0(savePath, Type, "_qc5_norm_Idenmarker_norm_exp_k", phenok, ".rds"))
+
+Unknown_exp <- read.csv("/mnt/data/lyx/IMC/analysis/clustering/UNKNOWN_qc5_norm_Idenmarker_flowsom_pheno_k15.csv")
+Unknown_exp$SubType <- "UNKNOWN"
+UnknownMajor <- c(
+"Tumor", "Stromal", "Myeloid", "Myeloid", "Tumor",
+"Myeloid", "Tumor", "Lymphocyte", "Tumor", "UNKNOWN",
+"Tumor", "Stromal", "Lymphocyte", "Lymphocyte", "Tumor",
+"Lymphocyte", "Tumor", "Lymphocyte","Lymphocyte", "Myeloid",
+"UNKNOWN", "UNKNOWN", "Myeloid", "Lymphocyte", "UNKNOWN",
+"Myeloid", "Stromal", "Myeloid", "Myeloid","UNKNOWN"
+)
+UnknownMinor <- c(
+"TC_Ki67", "SC_aSMA", "Macro_CD11b", "Macro_HLADR", "TC_EpCAM",
+"Macro_HLADR", "TC_Ki67", "CD8T", "TC_CAIX", "UNKNOWN",
+"TC_EpCAM", "SC_COLLAGEN", "CD4T", "T_Exausted", "TC_EpCAM",
+"CD4T", "TC_EpCAM", "B", "CD27+ Cell", "Mono_CD11c",
+"UNKNOWN", "UNKNOWN", "CLEC9A+ DC", "CD366+ CD4T", "UNKNOWN",
+"CD80+ DC", "SC_FAP", "Mono_CD11c", "Macro_CD169","UNKNOWN"
+)
+clusterids <- as.numeric(names(table(Unknown_exp$UNKNOWN_flowsom100pheno15)))
+for (clusterid in clusterids) {
+    Unknown_exp[Unknown_exp$UNKNOWN_flowsom100pheno15 %in% clusterid, ]$MajorType <- UnknownMajor[clusterid]
+    Unknown_exp[Unknown_exp$UNKNOWN_flowsom100pheno15 %in% clusterid, ]$SubType <- UnknownMinor[clusterid]
+}
+table(Unknown_exp$MajorType)
+table(Unknown_exp$SubType)
+
+bestnorm_exp[match(Unknown_exp$CellID, bestnorm_exp$CellID), ]$MajorType <- Unknown_exp$MajorType
+bestnorm_exp[match(Unknown_exp$CellID, bestnorm_exp$CellID), ]$SubType <- Unknown_exp$SubType
+table(bestnorm_exp$MajorType)
+table(bestnorm_exp$SubType)
+bestnorm_exp[which(bestnorm_exp$SubType == "UNKNOWN"), ]$MajorType <- "UNKNOWN"
+
+## slightly chage
+bestnorm_exp[bestnorm_exp$SubType == "CLEC9A+ DC", ]$SubType <- "Macro_CD163"
+
+markersList <- c(
+    "CD45", "CD20", "CD3", "CD8a", "CD4", "FoxP3", "CD57", ## Lymphocyte
+    "HLADR", "CD68", "CD14", "CD11c", "CD11b", "CD16", "CLEC9A", "CD169", "CD163", ## Myeloid
+    "CollagenI", "Vimentin", "AlphaSMA", "FAP", ## Stromal
+    "EpCAM", ## Tumor
+    "Ki67", "HK2", "FASN", "PRPS1", "GLUT1", ## Cell grouth
+    "VEGF", "CAIX", ## Hypoxia
+    "CD127", "CD27", "CD80", ## Immuno-activation
+    "CD274", "CD279", "TIGIT", "CD366" ## Immuno-checkpoint
+)
+
+MarkerHeatmap(bestnorm_exp, markersList, savePath)
+saveRDS(bestnorm_exp, paste0(savePath, "annotate_allcells.rds"))
+write.csv(bestnorm_exp, file = paste0(savePath, "annotate_allcells.csv"), row.names = FALSE)

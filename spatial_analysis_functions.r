@@ -11,17 +11,17 @@ library(grid)
 library(magick)
 
 ### Make groupInfo file
-GetGroupInfo <- function(sce, clinical){
+GetGroupInfo <- function(sce, clinical) {
     ROIs <- names(table(sce$ID))
 
     returnDF <- matrix(data = NA, nrow = length(ROIs), ncol = 2)
     colnames(returnDF) <- c("RFS_time", "RFS_status")
     rownames(returnDF) <- ROIs
 
-    for(i in 1:nrow(returnDF)){
+    for (i in 1:nrow(returnDF)) {
         PIDTemp <- strsplit(rownames(returnDF)[i], "_")[[1]][1]
         returnDF[i, 1] <- clinical[clinical$PID == PIDTemp, "RFS_time"]
-        returnDF[i,2] <- clinical[clinical$PID==PIDTemp,"RFS_status"]
+        returnDF[i, 2] <- clinical[clinical$PID == PIDTemp, "RFS_status"]
     }
 
     return(as.data.frame(returnDF))
@@ -49,11 +49,11 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.\\.", replacement = "+ ", x)
         })
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.",replacement = " ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.", replacement = " ", x)
         })
         rowname_ <- colname_
 
@@ -65,7 +65,7 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
             }
         }
     }
-    interDF <- round(interDF / numID,4)  
+    interDF <- round(interDF / numID, 4)
 
     ## Avoideness
     avoidDF <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
@@ -84,11 +84,11 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
         csvTemp <- ifelse(csvTemp <= p_threshold, 1, 0)
 
         colname_ <- colnames(csvTemp)
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.\\.",replacement = "+ ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.\\.", replacement = "+ ", x)
         })
-        colname_ <- sapply(colname_,function(x){
-            gsub(pattern = "\\.",replacement = " ",x)
+        colname_ <- sapply(colname_, function(x) {
+            gsub(pattern = "\\.", replacement = " ", x)
         })
         rowname_ <- colname_
 
@@ -101,7 +101,7 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
         }
     }
 
-    avoidDF <- round(avoidDF / numID,4)  
+    avoidDF <- round(avoidDF / numID, 4)
 
     ## Merge
     labelDF <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
@@ -127,9 +127,8 @@ getResult <- function(ResultPath, GroupInfo, clinicalGroup, celltypes, p_thresho
 }
 
 ### Transfrom matrix into plot dataframe
-BubblePlot <- function(MergeDF,LabelDF,savePath){
-
-    if (class(MergeDF) == "list"){
+BubblePlot <- function(MergeDF, LabelDF, savePath) {
+    if (class(MergeDF) == "list") {
         MergeDF <- MergeDF[[1]]
         LabelDF <- LabelDF[[1]]
     }
@@ -140,23 +139,23 @@ BubblePlot <- function(MergeDF,LabelDF,savePath){
     plotdf <- matrix(data = NA, nrow = nrow_ * ncol_, ncol = 4)
     plotdf <- as.data.frame(plotdf)
 
-    c1 <- rep(rownames(MergeDF),each = nrow_)
-    c2 <- rep(colnames(MergeDF),time = ncol_)
+    c1 <- rep(rownames(MergeDF), each = nrow_)
+    c2 <- rep(colnames(MergeDF), time = ncol_)
     num <- c()
     label <- c()
 
-    for (i in 1:nrow_){
-        num <- c(num,as.numeric(MergeDF[i,]))
-        label <- c(label,as.numeric(LabelDF[i,]))
+    for (i in 1:nrow_) {
+        num <- c(num, as.numeric(MergeDF[i, ]))
+        label <- c(label, as.numeric(LabelDF[i, ]))
     }
-    label <- ifelse(label == 1, "Interaction","Avoidence")
-    
+    label <- ifelse(label == 1, "Interaction", "Avoidence")
+
     colnames(plotdf) <- c("Celltype1", "Celltype2", "ROI Fraction", "Spatial Status")
 
     plotdf["Celltype1"] <- c1
     plotdf["Celltype2"] <- c2
     plotdf["ROI Fraction"] <- num
-    plotdf["Spatial Status"] <- as.factor(label) 
+    plotdf["Spatial Status"] <- as.factor(label)
 
     ### bubble plot
     p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2, size = `ROI Fraction`, color = `Spatial Status`)) +
@@ -165,14 +164,14 @@ BubblePlot <- function(MergeDF,LabelDF,savePath){
             panel.background = element_blank(),
             panel.grid.major = element_line(colour = "white"),
             panel.border = element_rect(colour = "white", fill = NA),
-        axis.text.x = element_text(angle = 45,hjust = 0.5,vjust = 0.25))
+            axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.25)
+        )
 
     pdf(savePath, width = 8, height = 8)
     print(p)
     dev.off()
 
     return(NULL)
-
 }
 
 ## Double heatmap
@@ -183,36 +182,37 @@ DoubleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, p
     plotdf <- matrix(data = 0, nrow = nrow(DF1) * ncol(DF1), ncol = 4)
     plotdf <- as.data.frame(plotdf)
 
-    plotdf[,1] <- rep(rownames(DF1),times=ncol(DF1))
-    plotdf[,2] <- rep(colnames(DF1),each=nrow(DF1))
-    plotdf[,3] <- as.numeric(as.matrix(DF1))
-    plotdf[,4] <- as.numeric(as.matrix(DF2))
-    
-    colnames(plotdf) <- c("Celltype1","Celltype2","Interaction1","Interaction2")
+    plotdf[, 1] <- rep(rownames(DF1), times = ncol(DF1))
+    plotdf[, 2] <- rep(colnames(DF1), each = nrow(DF1))
+    plotdf[, 3] <- as.numeric(as.matrix(DF1))
+    plotdf[, 4] <- as.numeric(as.matrix(DF2))
 
-     if (plot == "heatmap") {
-         p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
-             geom_heat_tri(
-                 upper = Interaction1, lower = Interaction2,
-                 upper_name = c(group1), lower_name = c(group2),
-                 lower_colors = c("#075fd5", "white", "#fd6a78"),
-                 upper_colors = c("#075fd5", "white", "#fd6a78")
-             ) +
-             theme_bw() +
-             theme(axis.text.x = element_text(angle = 90, hjust = 1))
-     }
-    if(plot == "circle"){
-            p<- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
-geom_heat_circle(outside = Interaction2,
-inside= Interaction1,
-outside_colors= c('#075fd5','white','#fd6a78'),
-inside_colors= c('#075fd5','white','#fd6a78'))+
-theme_bw() +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    colnames(plotdf) <- c("Celltype1", "Celltype2", "Interaction1", "Interaction2")
 
+    if (plot == "heatmap") {
+        p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
+            geom_heat_tri(
+                upper = Interaction1, lower = Interaction2,
+                upper_name = c(group1), lower_name = c(group2),
+                lower_colors = c("#075fd5", "white", "#fd6a78"),
+                upper_colors = c("#075fd5", "white", "#fd6a78")
+            ) +
+            theme_bw() +
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    }
+    if (plot == "circle") {
+        p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
+            geom_heat_circle(
+                outside = Interaction2,
+                inside = Interaction1,
+                outside_colors = c("#075fd5", "white", "#fd6a78"),
+                inside_colors = c("#075fd5", "white", "#fd6a78")
+            ) +
+            theme_bw() +
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))
     }
 
-    pdf(savePath,height = 6,width = 8)
+    pdf(savePath, height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -220,18 +220,17 @@ theme_bw() +
 }
 
 ## t-test for interaction number between groups
-LoadAnalysisResult <- function(IDs1,celltypes,sce){
-
+LoadAnalysisResult <- function(IDs1, celltypes, sce) {
     numtypes <- length(celltypes)
 
-    array1 <- array(data = NA,dim = c(numtypes,numtypes,length(IDs1)))
+    array1 <- array(data = NA, dim = c(numtypes, numtypes, length(IDs1)))
     rownames(array1) <- celltypes
     colnames(array1) <- celltypes
 
-    i = 1
+    i <- 1
     for (ID in IDs1) {
         sceTemp <- sce[, sce$ID == ID]
-        
+
         ## load result dataframe
         filepathTemp <- paste0(ResultPath, ID, "/TureInteraction/TureInteraction.csv")
         csvTemp <- read.csv(filepathTemp)
@@ -247,42 +246,41 @@ LoadAnalysisResult <- function(IDs1,celltypes,sce){
             rownames(TempMat) <- celltypes
 
             ## match the names of csvTemp and TempMat
-            for(j in 1:ncol(csvTemp)){
+            for (j in 1:ncol(csvTemp)) {
                 colName <- colnames(csvTemp)[j]
-                TempMat[match(rownames(csvTemp),rownames(TempMat)),colName] <- csvTemp[,j]
+                TempMat[match(rownames(csvTemp), rownames(TempMat)), colName] <- csvTemp[, j]
             }
-        } 
-        else {
+        } else {
             csvTemp <- csvTemp[match(celltypes, rownames(csvTemp)), ]
             TempMat <- csvTemp[, match(celltypes, colnames(csvTemp))]
         }
-        
+
         ## calculate the cell number of certain cell types
         cellnumMat <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
         rownames(cellnumMat) <- celltypes
         colnames(cellnumMat) <- celltypes
 
-        for(j in 1:ncol(cellnumMat)){
+        for (j in 1:ncol(cellnumMat)) {
             c1 <- colnames(cellnumMat)[j]
-            c1num <- ncol(sceTemp[,sceTemp$SubType==c1])
-            cellnumMat[,j] <- cellnumMat[,j] + c1num
+            c1num <- ncol(sceTemp[, sceTemp$SubType == c1])
+            cellnumMat[, j] <- cellnumMat[, j] + c1num
         }
-        for(j in 1:nrow(cellnumMat)){
+        for (j in 1:nrow(cellnumMat)) {
             c2 <- rownames(cellnumMat)[j]
             c2num <- ncol(sceTemp[, sceTemp$SubType == c2])
-            cellnumMat[j,] <- cellnumMat[j,] + c2num
+            cellnumMat[j, ] <- cellnumMat[j, ] + c2num
         }
 
-        TempMat <- ifelse(cellnumMat == 0,0,round(TempMat / cellnumMat,6))  
+        TempMat <- ifelse(cellnumMat == 0, 0, round(TempMat / cellnumMat, 6))
 
         array1[, , i] <- TempMat
-        i = i + 1
+        i <- i + 1
     }
-    
+
     return(array1)
 }
 
-TestDiff <- function(array1,array2,celltypes,savepath){
+TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE) {
     numtypes <- length(celltypes)
     PvalueMat <- matrix(data = NA, nrow = numtypes, ncol = numtypes)
     rownames(PvalueMat) <- celltypes
@@ -298,50 +296,63 @@ TestDiff <- function(array1,array2,celltypes,savepath){
 
             PvalueMat[i, j] <- t.test(value1, value2)$p.value
 
-            if(mean(value1) < mean(value2)){
+            if (mean(value1) < mean(value2)) {
                 MaskMat[i, j] <- 1
-            }
-            else {
-               MaskMat[i, j] <- -1
+            } else {
+                MaskMat[i, j] <- -1
             }
 
-            if(mean(value2) == 0){
-FoldChangeMat[i,j] <- 0
+            if (mean(value2) == 0) {
+                FoldChangeMat[i, j] <- 0
+            } else {
+                FoldChangeMat[i, j] <- mean(value1) / mean(value2)
             }
-            else {
-               FoldChangeMat[i,j] <- mean(value1) / mean(value2)
-            }
-            
         }
     }
-    PvalueMat <- -log10(PvalueMat)
-    FoldChangeMat <- ifelse(FoldChangeMat==0,0,log2(FoldChangeMat))
+    if (do.fdr) {
+        qvalueMat <- matrix(p.adjust(as.numeric(PvalueMat), method = "BH"), nrow = nrow(PvalueMat))
+        colnames(qvalueMat) <- colnames(PvalueMat)
+        rownames(qvalueMat) <- rownames(PvalueMat)
+        qvalueMat <- -log10(qvalueMat)
+        FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
 
-    HeatmapForDiff(PvalueMat,MaskMat,FoldChangeMat,savepath)
+        HeatmapForDiff(qvalueMat, MaskMat, FoldChangeMat, savepath)
+    } else {
+        PvalueMat <- -log10(PvalueMat)
+        FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
+
+        HeatmapForDiff(PvalueMat, MaskMat, FoldChangeMat, savepath)
+    }
 
     return(NULL)
 }
 
 getSig <- function(dc) {
-  sc <- ''
-  if (dc >= 3) sc <- '***'
-  else if (dc >= 2) sc <- '**'
-  else if (dc >= 1.3) sc <- '*'
-  return(sc)
-} 
+    sc <- ""
+    if (dc >= 2) {
+        sc <- "****"
+    } else if (dc >= 1.3) {
+        sc <- "***"
+    } else if (dc >= 1) {
+        sc <- "**"
+    } else if (dc >= 0.82) {
+        sc <- "*"
+    }
+    return(sc)
+}
 
 ## Modify
-HeatmapForDiff <- function(PvalueMat,MaskMat,FoldChangeMat,savepath){
+HeatmapForDiff <- function(PvalueMat, MaskMat, FoldChangeMat, savepath) {
     sig_mat <- matrix(sapply(PvalueMat, getSig), nrow = nrow(PvalueMat))
 
     plotdf <- FoldChangeMat #* MaskMat
-    
+
     p <- pheatmap(
         plotdf,
         cellwidth = 16, cellheight = 12,
         cluster_row = F, cluster_col = F,
-        #legend_labels = c("Up-regulated","down-regulated"),legend_breaks = c(-0.5,0.5),
-        angle_col = '90', display_numbers = sig_mat, fontsize_number = 15
+        # legend_labels = c("Up-regulated","down-regulated"),legend_breaks = c(-0.5,0.5),
+        angle_col = "90", display_numbers = sig_mat, fontsize_number = 15
     )
     pdf(savepath, width = 10, height = 8)
     print(p)
@@ -350,28 +361,27 @@ HeatmapForDiff <- function(PvalueMat,MaskMat,FoldChangeMat,savepath){
     return(NULL)
 }
 
-getInteracDiff <- function(ResultPath, sce, GroupInfo, groups, celltypes,savepath){
-
+getInteracDiff <- function(ResultPath, sce, GroupInfo, groups, celltypes, savepath) {
     IDs1 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[1], ])
     IDs2 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[2], ])
 
-    array1 <- LoadAnalysisResult(IDs1,celltypes, sce)
-    array2 <- LoadAnalysisResult(IDs2,celltypes, sce)
+    array1 <- LoadAnalysisResult(IDs1, celltypes, sce)
+    array2 <- LoadAnalysisResult(IDs2, celltypes, sce)
 
-    TestDiff(array1,array2,celltypes,savepath)
+    TestDiff(array1, array2, celltypes, savepath)
 
     return(NULL)
 }
 
 ## cox test
-cox_test <- function(ResultPath, GroupInfo, groups, celltypes,savepath){
+cox_test <- function(ResultPath, GroupInfo, groups, celltypes, savepath) {
     IDs1 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[1], ])
     IDs2 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[2], ])
 
-    array1 <- LoadAnalysisResult(IDs1,celltypes)
-    array2 <- LoadAnalysisResult(IDs2,celltypes)
+    array1 <- LoadAnalysisResult(IDs1, celltypes)
+    array2 <- LoadAnalysisResult(IDs2, celltypes)
 
-    GroupInfo <- GroupInfo[c(IDs1,IDs2),]
+    GroupInfo <- GroupInfo[c(IDs1, IDs2), ]
 
     time <- GroupInfo$RFS_time
     status <- GroupInfo$RFS_status
@@ -379,14 +389,14 @@ cox_test <- function(ResultPath, GroupInfo, groups, celltypes,savepath){
 
     data <- matrix(data = NA, nrow = length(time), ncol = 3)
     data <- as.data.frame(data)
-    colnames(data) <- c("Number","RFS_time","RFS_status")
+    colnames(data) <- c("Number", "RFS_time", "RFS_status")
     data$Number <- value
     data$RFS_time <- as.numeric(time)
-    data$RFS_status <- ifelse(status=="Recurrence",1,0)
+    data$RFS_status <- ifelse(status == "Recurrence", 1, 0)
     data <- na.omit(data)
 
-    data$Number[1:61] <- sample(1:100,size = 61)
-    data$Number[62:115] <- sample(100:200,size = 54)
+    data$Number[1:61] <- sample(1:100, size = 61)
+    data$Number[62:115] <- sample(100:200, size = 54)
 
     fit <- coxph(Surv(RFS_time, RFS_status) ~ Number, data = data)
     summary(fit)
@@ -397,42 +407,42 @@ cox_test <- function(ResultPath, GroupInfo, groups, celltypes,savepath){
 ## visualize functions for sce object
 
 ## get cell coordinate
-getCoordinate <- function(sce_){
-    if(!"Position"%in%colnames(colData(sce_))){
+getCoordinate <- function(sce_) {
+    if (!"Position" %in% colnames(colData(sce_))) {
         cat("There is not column named Position!", "\n")
         return(NULL)
     }
 
-    position <- sapply(sce_$Position,function(a){
-        strsplit(a,",")
+    position <- sapply(sce_$Position, function(a) {
+        strsplit(a, ",")
     })
     names(position) <- NULL
 
-    x <- lapply(position,function(b){
-        return(as.numeric(strsplit(b[1],"\\(")[[1]][2])) 
+    x <- lapply(position, function(b) {
+        return(as.numeric(strsplit(b[1], "\\(")[[1]][2]))
     })
-    y <- lapply(position,function(b){
-        return(as.numeric(strsplit(b[2],"\\)")[[1]][1])) 
+    y <- lapply(position, function(b) {
+        return(as.numeric(strsplit(b[2], "\\)")[[1]][1]))
     })
 
     x <- unlist(x)
     y <- unlist(y)
 
-    return(list(x,y))
+    return(list(x, y))
 }
 
-## plot Marker expression value on cell-level 
-PlotMarker <- function(sce, ROI, Marker, SavePath){
-    if(!Marker %in% rownames(sce)){
-        cat(Marker, " is no in sce object!","\n")
+## plot Marker expression value on cell-level
+PlotMarker <- function(sce, ROI, Marker, SavePath) {
+    if (!Marker %in% rownames(sce)) {
+        cat(Marker, " is no in sce object!", "\n")
         return(NULL)
     }
 
-    sce_ <- sce[,sce$ID == ROI]
+    sce_ <- sce[, sce$ID == ROI]
 
     coorList <- getCoordinate(sce_)
 
-    value <- sce_[Marker,]
+    value <- sce_[Marker, ]
     value <- as.vector(assay(value))
 
     plotdf <- as.data.frame(matrix(data = NA, nrow = length(value), ncol = 3))
@@ -441,13 +451,13 @@ PlotMarker <- function(sce, ROI, Marker, SavePath){
     plotdf["y"] <- coorList[[2]]
     plotdf["Expression"] <- value
 
-    myPalette <- brewer.pal(2,"Paired")
+    myPalette <- brewer.pal(2, "Paired")
     p <- ggplot(plotdf, aes(x = x, y = y, color = Expression)) +
         geom_point(size = 1) +
         scale_colour_gradientn(colours = myPalette, limits = c(0, 1)) +
-        labs(title = paste0(Marker," expression level in ",ROI))+
+        labs(title = paste0(Marker, " expression level in ", ROI)) +
         theme_test()
-        
+
     pdf(SavePath, height = 6, width = 8)
     print(p)
     dev.off()
@@ -455,10 +465,10 @@ PlotMarker <- function(sce, ROI, Marker, SavePath){
     return(p)
 }
 
-## plot celltypes on cell-level 
-PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath = NULL){
-    #colnames(colData(sce))
-    sce_ <- sce[,sce$ID == ROI]
+## plot celltypes on cell-level
+PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath = NULL) {
+    # colnames(colData(sce))
+    sce_ <- sce[, sce$ID == ROI]
 
     coorList <- getCoordinate(sce_)
 
@@ -466,25 +476,25 @@ PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath = NULL){
     celltypes <- ifelse(celltypes %in% selectCelltypes, celltypes, "Background")
     celltypes <- as.factor(celltypes)
 
-    idx <- match("Background",levels(celltypes))
-    levels(celltypes) <- c('Background',levels(celltypes)[-idx])
+    idx <- match("Background", levels(celltypes))
+    levels(celltypes) <- c("Background", levels(celltypes)[-idx])
 
     plotdf <- as.data.frame(matrix(data = NA, nrow = length(celltypes), ncol = 4))
-    colnames(plotdf) <- c("x", "y", "Identity","value")
+    colnames(plotdf) <- c("x", "y", "Identity", "value")
     plotdf["x"] <- coorList[[1]]
     plotdf["y"] <- coorList[[2]]
-    plotdf["Identity"] <- celltypes 
+    plotdf["Identity"] <- celltypes
 
-    myPalette <- brewer.pal(length(selectCelltypes),"Dark2")
+    myPalette <- brewer.pal(length(selectCelltypes), "Dark2")
 
     p <- ggplot(plotdf, aes(x = x, y = y, color = Identity)) +
         geom_point(size = 1) +
-        scale_colour_manual(values = c("grey",myPalette)) +
-        labs(title = paste0(ROI))+
+        scale_colour_manual(values = c("grey", myPalette)) +
+        labs(title = paste0(ROI)) +
         theme_test()
 
     pdf(SavePath, height = 6, width = 8)
-    #pdf("test.pdf", height = 6, width = 8)
+    # pdf("test.pdf", height = 6, width = 8)
     print(p)
     dev.off()
 
@@ -493,23 +503,22 @@ PlotCelltypes <- function(sce, ROI, selectCelltypes, SavePath = NULL){
 
 
 ## calculate the cell distance
-getDistance <- function(coorList1,coorList2){
-
-    x1 <- round(coorList1[[1]],6)
-    y1 <- round(coorList1[[2]],6)
-    x2 <- round(coorList2[[1]],6)
-    y2 <- round(coorList2[[2]],6)
+getDistance <- function(coorList1, coorList2) {
+    x1 <- round(coorList1[[1]], 6)
+    y1 <- round(coorList1[[2]], 6)
+    x2 <- round(coorList2[[1]], 6)
+    y2 <- round(coorList2[[2]], 6)
 
     df <- matrix(data = NA, nrow = length(x2), ncol = length(x1))
-    rownames(df) <- paste0(x2,",",y2)
-    colnames(df) <- paste0(x1,",",y1)
+    rownames(df) <- paste0(x2, ",", y2)
+    colnames(df) <- paste0(x1, ",", y1)
 
-    for(i in 1:ncol(df)){
-        x1Temp <- rep(x1[i],times = nrow(df)) 
-        y1Temp <- rep(y1[i],times = nrow(df)) 
+    for (i in 1:ncol(df)) {
+        x1Temp <- rep(x1[i], times = nrow(df))
+        y1Temp <- rep(y1[i], times = nrow(df))
 
-        dist <- sqrt((x1Temp-x2)^2 + (y1Temp-y2)^2)
-        dist <- ifelse(dist==0,999,dist)
+        dist <- sqrt((x1Temp - x2)^2 + (y1Temp - y2)^2)
+        dist <- ifelse(dist == 0, 999, dist)
         df[, i] <- dist
     }
 
@@ -517,30 +526,30 @@ getDistance <- function(coorList1,coorList2){
 }
 
 ## plot celltype interaction
-PlotCelltypeInteraction <- function(sce, ROI, celltypes, radius = 22, savePath){
+PlotCelltypeInteraction <- function(sce, ROI, celltypes, radius = 22, savePath) {
     sce_ <- sce[, sce$ID == ROI]
     c1 <- celltypes[1]
     c2 <- celltypes[2]
 
     allcoorList <- getCoordinate(sce_)
-    x_all <- round(allcoorList[[1]],6)
-    y_all <- round(allcoorList[[2]],6)
+    x_all <- round(allcoorList[[1]], 6)
+    y_all <- round(allcoorList[[2]], 6)
 
-    sce_1 <- sce_[,sce_$SubType == c1]
-    sce_2 <- sce_[,sce_$SubType == c2]
+    sce_1 <- sce_[, sce_$SubType == c1]
+    sce_2 <- sce_[, sce_$SubType == c2]
 
-    if(dim(sce_1)[2] < 5){
-        cat(c1," in ",ROI," were less than 5!",'\n')
+    if (dim(sce_1)[2] < 5) {
+        cat(c1, " in ", ROI, " were less than 5!", "\n")
     }
     if (dim(sce_2)[2] < 5) {
         cat(c2, " in ", ROI, " were less than 5!", "\n")
     }
-    
+
     coorList1 <- getCoordinate(sce_1)
     coorList2 <- getCoordinate(sce_2)
 
     df <- getDistance(coorList1, coorList2)
-    MASK <- ifelse(df<=radius,1,0)
+    MASK <- ifelse(df <= radius, 1, 0)
 
     plotdf <- as.data.frame(matrix(data = NA, nrow = length(x_all), ncol = 3))
     colnames(plotdf) <- c("x", "y", "Subtype")
@@ -560,20 +569,20 @@ PlotCelltypeInteraction <- function(sce, ROI, celltypes, radius = 22, savePath){
                 c2y <- as.numeric(strsplit(c2Temp, ",")[[1]][2])
 
                 index1 <- (plotdf$x == c1x) & (plotdf$y == c1y)
-                plotdf$Subtype[index1] = c1
+                plotdf$Subtype[index1] <- c1
 
                 index2 <- (plotdf$x == c2x) & (plotdf$y == c2y)
-                plotdf$Subtype[index2] = c2
+                plotdf$Subtype[index2] <- c2
             }
         }
     }
-    plotdf$Subtype[is.na(plotdf$Subtype)] = "Background"
-    
+    plotdf$Subtype[is.na(plotdf$Subtype)] <- "Background"
+
     p <- ggplot(plotdf, aes(x = x, y = y, color = Subtype)) +
         geom_point(size = 1) +
-        labs(title = paste0("Interaction of ",c1," and ",c2," in ",ROI))+
+        labs(title = paste0("Interaction of ", c1, " and ", c2, " in ", ROI)) +
         theme_test()
-        
+
     pdf(savePath, height = 6, width = 8)
     print(p)
     dev.off()
@@ -583,14 +592,13 @@ PlotCelltypeInteraction <- function(sce, ROI, celltypes, radius = 22, savePath){
 
 ## load cell mask files and rename
 LoadCellMask <- function(cellMaskPath, ROI) {
-
     files <- list.files(cellMaskPath)
-    filesROI <- sapply(files,function(x){
-        temp <- strsplit(x,split = "_")[[1]]
-        paste0(temp[2],"_",temp[3]) 
+    filesROI <- sapply(files, function(x) {
+        temp <- strsplit(x, split = "_")[[1]]
+        paste0(temp[2], "_", temp[3])
     })
 
-    MaskPath <- paste0(cellMaskPath,names(filesROI[filesROI==ROI]))
+    MaskPath <- paste0(cellMaskPath, names(filesROI[filesROI == ROI]))
 
     ## read image
     CellMaskMat <- ReadTiff(MaskPath)
@@ -599,9 +607,8 @@ LoadCellMask <- function(cellMaskPath, ROI) {
 }
 
 ## load channel files
-LoadChannelImage <- function(channelIamgePath, ROI, channel){
-    
-    pathTemp1 <- paste0(channelIamgePath, ROI,"/")
+LoadChannelImage <- function(channelIamgePath, ROI, channel) {
+    pathTemp1 <- paste0(channelIamgePath, ROI, "/")
     channels <- list.files(pathTemp1)
 
     channelImages <- sapply(channels, function(x) {
@@ -610,9 +617,9 @@ LoadChannelImage <- function(channelIamgePath, ROI, channel){
     })
 
     channelsPath <- c()
-    for(i in channel){
-        pathTemp2 <- paste0(pathTemp1,names(channelImages[channelImages==i]))
-        channelsPath <- c(channelsPath,pathTemp2)
+    for (i in channel) {
+        pathTemp2 <- paste0(pathTemp1, names(channelImages[channelImages == i]))
+        channelsPath <- c(channelsPath, pathTemp2)
     }
 
     ## Load channel images
@@ -620,20 +627,19 @@ LoadChannelImage <- function(channelIamgePath, ROI, channel){
     for (i in 1:length(channelsPath)) {
         imgTemp <- png::readPNG(channelsPath[i])
         imgTemp <- TransfromtoGray(imgTemp)
-        #imgTemp <- PercentileFilter(imgTemp,cutoff=0.95)
+        # imgTemp <- PercentileFilter(imgTemp,cutoff=0.95)
         imgTemp <- MedianFilter(imgTemp)
         imgTemp <- Transfromto0255(imgTemp)
 
         ImageList[[i]] <- imgTemp
-
     }
 
-    if(length(ImageList) == 2){
-        ImageList[[3]] <- matrix(data = 0,nrow = nrow(ImageList[[2]]), ncol = ncol(ImageList[[2]]))
+    if (length(ImageList) == 2) {
+        ImageList[[3]] <- matrix(data = 0, nrow = nrow(ImageList[[2]]), ncol = ncol(ImageList[[2]]))
     }
-    if(length(ImageList) == 1){
-        ImageList[[2]] <- matrix(data = 0,nrow = nrow(ImageList[[1]]), ncol = ncol(ImageList[[1]]))
-        ImageList[[3]] <- matrix(data = 0,nrow = nrow(ImageList[[1]]), ncol = ncol(ImageList[[1]]))
+    if (length(ImageList) == 1) {
+        ImageList[[2]] <- matrix(data = 0, nrow = nrow(ImageList[[1]]), ncol = ncol(ImageList[[1]]))
+        ImageList[[3]] <- matrix(data = 0, nrow = nrow(ImageList[[1]]), ncol = ncol(ImageList[[1]]))
     }
 
     ## combine different channel
@@ -642,87 +648,94 @@ LoadChannelImage <- function(channelIamgePath, ROI, channel){
     for (i in 1:length(channelsPath)) {
         imagearray[, , i] <- ImageList[[i]]
     }
-    
-    #png::writePNG(imgTemp,"median.png")
+
+    # png::writePNG(imgTemp,"median.png")
 
     return(imagearray)
-    
 }
 
 ## read tiff
-ReadTiff <- function(filePath,filter = F){
+ReadTiff <- function(filePath, filter = F) {
     tif <- readTIFF(filePath)
     tif <- Transfromto0255(tif)
-    if(filter){
+    if (filter) {
         tif <- ImageFilter(tif)
     }
-    
+
     return(tif)
 }
 
 ## 0 - 255 tranformation
-Transfromto0255 <- function(mat){
+Transfromto0255 <- function(mat) {
     max_ <- max(mat)
     min_ <- min(mat)
 
-    mat <- (mat-min_) / (max_-min_)
+    mat <- (mat - min_) / (max_ - min_)
     return(mat * 255)
 }
 
 ## Transform RGB image into gray-scale image
 TransfromtoGray <- function(array) {
-    mat <- array[,,1] + array[,,2] + array[,,3] / 3
+    mat <- array[, , 1] + array[, , 2] + array[, , 3] / 3
     return(mat)
 }
 
-## Image filter, remove the value more than percentile 
-PercentileFilter <- function(mat, cutoff = 0.99){
+## Image filter, remove the value more than percentile
+PercentileFilter <- function(mat, cutoff = 0.99) {
     cutoff <- quantile(mat, probs = cutoff)
-    ifelse(mat >= cutoff,0,mat)
+    ifelse(mat >= cutoff, 0, mat)
     return(mat)
 }
 
 ## Image fileter, median filter
-MedianFilter <- function(mat,filterSize = 3){
+MedianFilter <- function(mat, filterSize = 3) {
     rowNum <- nrow(mat)
     colNum <- ncol(mat)
 
-    margin <- (filterSize-1) %/% 2
+    margin <- (filterSize - 1) %/% 2
 
-    for(i in (1+margin):(rowNum-margin)){
-        for(j in (1+margin):(colNum-margin)){
+    for (i in (1 + margin):(rowNum - margin)) {
+        for (j in (1 + margin):(colNum - margin)) {
             seq_ <- as.numeric(mat[(i - margin):(i + margin), (j - margin):(j + margin)])
-            mat[i,j] = median(seq_)
+            mat[i, j] <- median(seq_)
         }
     }
     return(mat)
 }
 
 ## Visualize the cellsubtype, cell mask and channel of ROI
-VisTypeMaskChannel <- function(sce, ROI, celltypes, channel, maskPath, channelPath, SavePath){
-    if (!dir.exists(SavePath)) {dir.create(SavePath)}
-    SavePath <- paste0(SavePath,ROI,"/")
-    if (!dir.exists(SavePath)) {dir.create(SavePath)}
-    
+VisTypeMaskChannel <- function(sce, ROI, celltypes, channel, maskPath, channelPath, SavePath) {
+    if (!dir.exists(SavePath)) {
+        dir.create(SavePath)
+    }
+    SavePath <- paste0(SavePath, ROI, "/")
+    if (!dir.exists(SavePath)) {
+        dir.create(SavePath)
+    }
+
     MaskMat <- LoadCellMask(maskPath, ROI)
     ChannelArray <- LoadChannelImage(channelPath, ROI, channel)
-    PlotCelltypes(sce, ROI, celltypes, paste0(SavePath,celltypes," on cell level.pdf"))
+    PlotCelltypes(sce, ROI, celltypes, paste0(SavePath, celltypes, " on cell level.pdf"))
 
     png::writePNG(MaskMat, paste0(SavePath, "CellMask.png"), dpi = 100)
     png::writePNG(ChannelArray, paste0(SavePath, channel[1], "-", channel[2], "_channel.png"), dpi = 100)
-    cat(ROI, ": CellMask, celltypes and channel image were done!",'\n')
+    cat(ROI, ": CellMask, celltypes and channel image were done!", "\n")
     return(NULL)
 }
 
 ## Visualize the cellsubtype on mask and channel of ROI on mask (undone)
-VisTypeonMask <- function(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath, ChannelPath, SavePath){
-    if (!dir.exists(SavePath)) {dir.create(SavePath)}
-    SavePath <- paste0(SavePath,ROI,"/")
-    if (!dir.exists(SavePath)) {dir.create(SavePath)}
-    
+VisTypeonMask <- function(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath, ChannelPath, SavePath) {
+    if (!dir.exists(SavePath)) {
+        dir.create(SavePath)
+    }
+    SavePath <- paste0(SavePath, ROI, "/")
+    if (!dir.exists(SavePath)) {
+        dir.create(SavePath)
+    }
+
     MaskMat <- LoadCellMask(CellMaskPath, ROI)
     ChannelArray <- LoadChannelImage(ChannelPath, ROI, channels2plot)
-    p <- PlotCelltypes(sce_, ROI, celltypes2plot,returenFigure = T)
+    p <- PlotCelltypes(sce_, ROI, celltypes2plot, returenFigure = T)
 
     png::writePNG(MaskMat, paste0(SavePath, "CellMask.png"), dpi = 100)
     png::writePNG(ChannelArray, paste0(SavePath, channels2plot[1], "-", channels2plot[2], "_channel.png"), dpi = 100)
@@ -735,6 +748,6 @@ VisTypeonMask <- function(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath
     grid.raster(mask)
     dev.off()
 
-    cat(ROI, ": CellMask, celltypes and channel image were done!",'\n')
+    cat(ROI, ": CellMask, celltypes and channel image were done!", "\n")
     return(NULL)
 }

@@ -175,7 +175,6 @@ for (structure in colName) {
     ### clutering via metabolize molecular
     rownames(sce)
     reclusMarkers <- c(
-        "HLADR", "CD68", "CD14", "CD11c", "CD11b", "CD16", "CLEC9A", "CD169", "CD163", ## Cellidentity
         "PRPS1", "FASN", "GLUT1", "HK2", "Ki67", ## Cell Growth and Division
         "VEGF", "CAIX", ## Hypoxia
         "CD279", "CD274", "CD127", ## Immune-checkpoint
@@ -193,7 +192,7 @@ for (structure in colName) {
 
     ReMajorType <- c("Myeloid")
     ReclusterName <- "Myeloid"
-    ReSubType <- NULL
+    ReSubType <- "Macro_CD163"
 
     savePathTemp2 <- paste0(savePathTemp1, "reclustering/")
     if (!dir.exists(savePathTemp2)) {
@@ -234,7 +233,7 @@ if (F) {
 ## Certain reclustering types in cellular pattern (three group)
 for (structure in colName) {
     sce_ <- readRDS(paste0("/mnt/data/lyx/IMC/analysis/structure/", structure, "/Myeloid_recluster.rds"))
-    interstType <- c("8", "10")
+    interstType <- c("3", "6","11")
     PlotCertainTypeinPattern(sce_, Col1 = ReclusterName, types1 = interstType, Col2 = structure, groupCol = "RFS_status", savePath = paste0(savePath, structure, "/reclustering/"))
 
     ##

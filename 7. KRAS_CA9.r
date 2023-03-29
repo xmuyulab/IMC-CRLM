@@ -70,6 +70,9 @@ for (tissue in c("IM", "CT")) {
         dir.create(paste0(savePath, structure, "/", tissue, "/"))
     }
 
+    ## Cell subtype fraction in cellular neighbors pattern
+    HeatmapForCelltypeInNeighbor(sce_, "SubType", structure, paste0(savePath, structure, "/", tissue, "/"))
+
     ## Cellular pattern difference in Relaps and Non-Relaps
     CompareCellularPattern(sce_, sep = "KRAS_mutation", countcol = structure, n_cluster = 10, savePath = paste0(savePath, structure, "/", tissue, "/"))
 
