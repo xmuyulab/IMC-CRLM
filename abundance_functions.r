@@ -244,7 +244,6 @@ summaryClinical <- function(DF) {
     if (feature == "Lymph_positive") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Lymphonode-positive versus negative"
     }
-
   }
   return(DF)
 }
@@ -404,17 +403,17 @@ MultipleUniCOX <- function(df) {
   result <- matrix(data = NA, nrow = 0, ncol = 6)
   result <- as.data.frame(result)
 
-    colnames(df) <- sapply(colnames(df),function(x){
-    sub(pattern = "\\+",replacement = "",x)
+  colnames(df) <- sapply(colnames(df), function(x) {
+    sub(pattern = "\\+", replacement = "", x)
   })
-colnames(df) <- sapply(colnames(df), function(x) {
-  sub(pattern = " ", replacement = "_", x)
-})
+  colnames(df) <- sapply(colnames(df), function(x) {
+    sub(pattern = " ", replacement = "_", x)
+  })
 
   features <- colnames(df)[1:(ncol(df) - 2)]
   cat("The features in multi-cox are: ", features, "\n")
 
-  features <- features[-(match(c("RFS_time",'RFS_status'),features ))]
+  features <- features[-(match(c("RFS_time", "RFS_status"), features))]
 
   univ_formulas <- sapply(
     features,
@@ -457,7 +456,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, ti
   plotdf <- as.data.frame(plotdf)
   plotdf$PID <- rownames(plotdf)
 
-  features_ <- c("PID",features)
+  features_ <- c("PID", features)
 
   clinical2 <- clinical[match(plotdf$PID, clinical$PID), features_]
 
@@ -468,7 +467,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, ti
   rownames(clinical2) <- c(1:nrow(clinical2))
 
   ## bind more clinical information
-  plotdf <- dplyr::left_join(plotdf,clinical2,by='PID')
+  plotdf <- dplyr::left_join(plotdf, clinical2, by = "PID")
   plotdf <- plotdf[, c(celltypes2Plot, features)]
 
   result <- MultipleUniCOX(plotdf)
@@ -544,7 +543,7 @@ abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, ti
     )
   )
 
-  pdf(paste0(savePath, "Multi-uniCOX of ",tissue,".pdf"), width = 12, height = 9)
+  pdf(paste0(savePath, "Multi-uniCOX of ", tissue, ".pdf"), width = 12, height = 9)
   print(p)
   dev.off()
 

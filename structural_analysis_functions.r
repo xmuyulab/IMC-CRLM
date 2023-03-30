@@ -1229,7 +1229,7 @@ BarplotForInteraction <- function(ResultPath, celltype1, celltype2, ROIs1, ROIs2
 }
 
 ## Calculate celltypes difference in different clinical groups
-HeatmapForMarkersInGroups <- function(sce, markers, groupCol, savePath) {
+HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, savePath) {
     celltypes <- names(table(sce$SubType))
     celltypes <- celltypes[1:(length(celltypes) - 1)]
 
@@ -1244,7 +1244,6 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, savePath) {
         mat <- as.data.frame(t(assay(sce_)[markers, ]))
         mat$classLabel <- colData(sce_)[, groupCol]
         FCDF <- FCandPvalueCal(mat, xCol = c(1, length(markers)), yCol = (length(markers) + 1), need.sample = TRUE)
-
 
         FCVec <- c(FCVec, as.numeric(FCDF[, 2]))
         PVec <- c(PVec, as.numeric(FCDF[, 3]))
@@ -1264,12 +1263,16 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, savePath) {
 
     if (adjust.p) {
         plotdf$Qvalue <- p.adjust(PVec, method = "BH")
-        plotdf$Qlabel <- cut(plotdf$Qvalue, breaks = c(min(plotdf$Qvalue), 0.001, 0.01, 0.05), labels = c(8, 6, 4, 2))
-        plotdf$Qlabel <- as.factor(plotdf$Qlabel)
+        plotdf$Qlabel <- cut(plotdf$Qvalue, breaks = c(0, 0.001, 0.01, 0.05, 1), labels = c(8, 6, 4, 2))
+        plotdf$Qlabel <- as.factor(as.numeric(as.character(plotdf$Qlabel))) 
     }
-    plotdf$Plabel <- cut(plotdf$Pvalue, breaks = c(min(plotdf$Pvalue), 0.001, 0.01, 0.05), labels = c(8, 6, 4, 2))
-    plotdf$Plabel <- as.factor(plotdf$Plabel)
+    else{
+        plotdf$Plabel <- cut(plotdf$Pvalue, breaks = c(0, 0.001, 0.01, 0.05, 1), labels = c(8, 6, 4, 2))
+        plotdf$Plabel <- as.factor(plotdf$Plabel)
+                plotdf$Plabel <- as.factor(as.numeric(as.character(plotdf$Plabel))) 
 
+    }
+    
     p <- ggplot(data = plotdf, aes(x = Subtype, y = Marker)) +
         geom_point(aes(size = Qlabel, fill = FoldChange), shape = 22, color = "grey80") +
         scale_fill_gradient2(low = "#445393", high = "#EE2627", mid = "white") +
