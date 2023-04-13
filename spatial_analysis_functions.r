@@ -1,5 +1,6 @@
 ## functions for permutation test in R
 library(pheatmap)
+library(ComplexHeatmap)
 library(RColorBrewer)
 library(ggplot2)
 library(SingleCellExperiment)
@@ -9,6 +10,9 @@ library(tiff)
 library(ggDoubleHeat)
 library(grid)
 library(magick)
+library(ggpubr)
+library(ggprism)
+library(purrr)
 
 ### Make groupInfo file
 GetGroupInfo <- function(sce, clinical) {
@@ -174,21 +178,26 @@ BubblePlot <- function(MergeDF, LabelDF, savePath) {
     return(NULL)
 }
 
-## Double heatmap
-DoubleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, plot = "circle", savePath) {
-    DF1 <- MergeDF1 * labelDF1
-    DF2 <- MergeDF2 * labelDF2
+# DoubleHeat function to create a double heatmap visualization of cell interaction data
+DoubleHeat <- function(data1, label1, group1, data2, label2, group2, plot = "circle", savePath) {
+    # Multiply the data frames element-wise
+    df1 <- data1 * label1
+    df2 <- data2 * label2
 
-    plotdf <- matrix(data = 0, nrow = nrow(DF1) * ncol(DF1), ncol = 4)
+    # Initialize an empty data frame
+    plotdf <- matrix(data = 0, nrow = nrow(df1) * ncol(df1), ncol = 4)
     plotdf <- as.data.frame(plotdf)
 
-    plotdf[, 1] <- rep(rownames(DF1), times = ncol(DF1))
-    plotdf[, 2] <- rep(colnames(DF1), each = nrow(DF1))
-    plotdf[, 3] <- as.numeric(as.matrix(DF1))
-    plotdf[, 4] <- as.numeric(as.matrix(DF2))
+    # Fill the data frame with the calculated values
+    plotdf[, 1] <- rep(rownames(df1), times = ncol(df1))
+    plotdf[, 2] <- rep(colnames(df1), each = nrow(df1))
+    plotdf[, 3] <- as.numeric(as.matrix(df1))
+    plotdf[, 4] <- as.numeric(as.matrix(df2))
 
+    # Set the column names of the data frame
     colnames(plotdf) <- c("Celltype1", "Celltype2", "Interaction1", "Interaction2")
 
+    # Check the specified plot type and create the corresponding plot
     if (plot == "heatmap") {
         p <- ggplot(plotdf, aes(x = Celltype1, y = Celltype2)) +
             geom_heat_tri(
@@ -212,12 +221,14 @@ DoubleHeat <- function(MergeDF1, labelDF1, group1, MergeDF2, labelDF2, group2, p
             theme(axis.text.x = element_text(angle = 90, hjust = 1))
     }
 
+    # Save the plot as a PDF
     pdf(savePath, height = 6, width = 8)
     print(p)
     dev.off()
 
     return(NULL)
 }
+
 
 ## t-test for interaction number between groups
 LoadAnalysisResult <- function(IDs1, celltypes, sce) {
@@ -280,7 +291,7 @@ LoadAnalysisResult <- function(IDs1, celltypes, sce) {
     return(array1)
 }
 
-TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE) {
+TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE, Sig) {
     numtypes <- length(celltypes)
     PvalueMat <- matrix(data = NA, nrow = numtypes, ncol = numtypes)
     rownames(PvalueMat) <- celltypes
@@ -316,44 +327,94 @@ TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE) {
         qvalueMat <- -log10(qvalueMat)
         FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
 
-        HeatmapForDiff(qvalueMat, MaskMat, FoldChangeMat, savepath)
+        HeatmapForDiff(qvalueMat, MaskMat, FoldChangeMat, Sig = Sig, savepath)
     } else {
         PvalueMat <- -log10(PvalueMat)
         FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
 
-        HeatmapForDiff(PvalueMat, MaskMat, FoldChangeMat, savepath)
+        HeatmapForDiff(PvalueMat, MaskMat, FoldChangeMat, Sig = Sig, savepath)
     }
 
     return(NULL)
 }
 
-getSig <- function(dc) {
+getSig.1 <- function(dc) {
     sc <- ""
+
     if (dc >= 2) {
-        sc <- "****"
-    } else if (dc >= 1.3) {
         sc <- "***"
-    } else if (dc >= 1) {
+    } else if (dc >= 1.3) {
         sc <- "**"
-    } else if (dc >= 0.82) {
+    } else if (dc >= 1) {
         sc <- "*"
     }
     return(sc)
 }
+getSig.05 <- function(dc) {
+    sc <- ""
 
+    if (dc >= 3) {
+        sc <- "***"
+    } else if (dc >= 2) {
+        sc <- "**"
+    } else if (dc >= 1.3) {
+        sc <- "*"
+    }
+    return(sc)
+}
+getSig.01 <- function(dc) {
+    sc <- ""
+    if (dc >= 4) {
+        sc <- "***"
+    } else if (dc >= 3) {
+        sc <- "**"
+    } else if (dc >= 2) {
+        sc <- "*"
+    }
+    return(sc)
+}
 ## Modify
-HeatmapForDiff <- function(PvalueMat, MaskMat, FoldChangeMat, savepath) {
-    sig_mat <- matrix(sapply(PvalueMat, getSig), nrow = nrow(PvalueMat))
-
+HeatmapForDiff <- function(PvalueMat, MaskMat, FoldChangeMat, Sig = 0.05, savepath) {
+    if (Sig == 0.05) {
+        sig_mat <- matrix(sapply(PvalueMat, getSig.05), nrow = nrow(PvalueMat))
+    }
+    if (Sig == 0.01) {
+        sig_mat <- matrix(sapply(PvalueMat, getSig.01), nrow = nrow(PvalueMat))
+    }
+    if (Sig == 0.1) {
+        sig_mat <- matrix(sapply(PvalueMat, getSig.1), nrow = nrow(PvalueMat))
+    }
     plotdf <- FoldChangeMat #* MaskMat
 
+    # Determine the range of fold changes in your data
+    min_value <- min(plotdf)
+    max_value <- max(plotdf)
+
+    # Determine the absolute maximum value, either positive or negative
+    abs_max <- max(abs(min_value), abs(max_value))
+
+    # Create a symmetric sequence of breaks with 0 in the middle
+    breaks <- seq(from = -abs_max, to = abs_max, length.out = 101)
+
+    # Create custom color palette with blue for negative values, white for zero, and red for positive values
+    color_palette <- colorRampPalette(c("blue", "white", "red"))(length(breaks) - 1)
+
+    # Create custom labels for the color legend
+    legend_labels <- c("Non-Relapse", "Relapse")
+
+    # Create the heatmap with custom breaks, color palette, and legend labels
     p <- pheatmap(
         plotdf,
         cellwidth = 16, cellheight = 12,
         cluster_row = F, cluster_col = F,
-        # legend_labels = c("Up-regulated","down-regulated"),legend_breaks = c(-0.5,0.5),
-        angle_col = "90", display_numbers = sig_mat, fontsize_number = 15
+        angle_col = "90", display_numbers = sig_mat, fontsize_number = 15,
+        breaks = breaks,
+        color = color_palette,
+        legend = TRUE,
+        legend_labels = legend_labels,
+        legend_breaks = c(min(breaks), max(breaks))
     )
+
     pdf(savepath, width = 10, height = 8)
     print(p)
     dev.off()
@@ -361,14 +422,92 @@ HeatmapForDiff <- function(PvalueMat, MaskMat, FoldChangeMat, savepath) {
     return(NULL)
 }
 
-getInteracDiff <- function(ResultPath, sce, GroupInfo, groups, celltypes, savepath) {
-    IDs1 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[1], ])
-    IDs2 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[2], ])
+getInteracDiff <- function(ResultPath, sce, GroupInfo = NULL, groups, celltypes, savepath, IDs1 = NULL, IDs2 = NULL, Sig = 0.05) {
+    if (is.null(IDs1)) {
+        IDs1 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[1], ])
+        IDs2 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[2], ])
+    }
 
     array1 <- LoadAnalysisResult(IDs1, celltypes, sce)
     array2 <- LoadAnalysisResult(IDs2, celltypes, sce)
 
-    TestDiff(array1, array2, celltypes, savepath)
+    TestDiff(array1, array2, celltypes, savepath, Sig = Sig)
+
+    return(NULL)
+}
+
+## Barplot to visualize certain interaction difference
+InterDiffBarplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol, groups, groupsName, celltypespair, savepath, IDs1 = NULL, IDs2 = NULL) {
+    if (is.null(IDs1)) {
+        IDs1 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[1], ])
+        IDs2 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[2], ])
+    }
+    celltypes <- names(table(sce$SubType))
+    array1 <- LoadAnalysisResult(IDs1, celltypes, sce)
+    array2 <- LoadAnalysisResult(IDs2, celltypes, sce)
+
+    numPair <- nrow(celltypespair)
+
+    # Prepare data for the plot
+    df <- as.data.frame(matrix(data = NA, ncol = 3, nrow = 0))
+    len <- length(c(IDs1, IDs2))
+
+    for (i in 1:numPair) {
+        c1 <- celltypespair[i, 1]
+        c2 <- celltypespair[i, 2]
+        row_ <- match(c1, rownames(array1[, , 1]))
+        col_ <- match(c2, colnames(array1[, , 1]))
+
+        v1 <- array1[row_, col_, ]
+        v2 <- array2[row_, col_, ]
+
+        valueVec <- c(v1, v2)
+        groupVec <- c(rep(groups[1], length(v1)), rep(groups[2], length(v2)))
+        interVec <- rep(paste0(c1, ":", c2), len)
+
+        dfTemp <- cbind(valueVec, groupVec, interVec)
+        df <- rbind(df, dfTemp)
+    }
+    colnames(df) <- c("Strength", "ClinicalGroup", "Interaction")
+    df$ClinicalGroup <- ifelse(df$ClinicalGroup == 1, groupsName[1], groupsName[2])
+    df[, 1] <- as.numeric(df[, 1])
+    df[, 2] <- as.character(df[, 2])
+    df[, 3] <- as.character(df[, 3])
+
+    # Create the plot
+    p <- ggbarplot(df,
+        x = "ClinicalGroup",
+        y = "Strength",
+        fill = "Interaction",
+        facet.by = "Interaction",
+        color = "black",
+        palette = ggsci::pal_jco("default")(10),
+        add = "mean_sd",
+        xlab = "Clinical Group",
+        ylab = "Strength",
+        legend = "none",
+        ggtheme = theme_minimal()
+    ) +
+        theme(
+            plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+            axis.title = element_text(size = 12, face = "bold"),
+            axis.text = element_text(size = 10),
+            legend.title = element_text(size = 12, face = "bold"),
+            legend.text = element_text(size = 10),
+            legend.key.size = unit(1, "cm"),
+            legend.position = "none",
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+        )
+    # Add the p-value label above the middle of the line
+    p <- p +
+        stat_compare_means(aes(group = ClinicalGroup),
+            method = "t.test",
+            label.y = ymax + 0.05 * (max(df$Strength, na.rm = TRUE) - min(df$Strength, na.rm = TRUE))
+        )
+    pdf(savepath, height = 6, width = 8)
+    print(p)
+    dev.off()
 
     return(NULL)
 }

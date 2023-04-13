@@ -44,30 +44,42 @@ for (tissue in c("CT", "IM")) {
     )
 }
 
-
-## COX for interaction
-## no necessary, cellular neighborhood pattern to analysis
-
-## Visualize
-if(F){
-    sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
-
+## Plot certain cell subpopulations interaction stack plot
 tissue <- "IM"
+ResultPath <- paste0("/mnt/data/lyx/IMC/analysis/spatial/permutation_", tissue, "/")
 
 sce_ <- sce[, sce$Tissue == tissue]
 
-ROIs <- names(table(sce_$ID))
+GroupInfo <- GetGroupInfo(sce_, clinical)
+celltypespair <- as.data.frame(matrix(data = NA, nrow = 0, ncol = 2))
+celltypespair <- rbind(celltypespair, c("Macro_CD11b", "Macro_CD169"), c("Macro_CD11b", "Macro_CD163"), c("Macro_CD11b", "Macro_HLADR"), c("Macro_CD11b", "Mono_Classic"))
+colnames(celltypespair) <- c("c1", "c2")
 
-CellMaskPath <- "/mnt/data/lyx/IMC/unet/predictionProbability/ori_cellmask/"
-ChannelPath <- "/mnt/data/lyx/IMC/IMCell_Output/save_img/raw/"
+InterDiffBarplot(
+    ResultPath, sce_, GroupInfo,
+    groupCol = "RFS_status", groups = c(1, 0), groupsName = c("Relapse", "Non-Relapse"),
+    celltypespair = celltypespair, savepath = paste0(FigurePath, "Interaction difference between R and NR.pdf")
+)
 
-channels2plot <- c("CD57", "FoxP3", "CD279")
-celltypes2plot <- c("Mono_CD57")
+## Visualize
+if (F) {
+    sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
 
-# ROIs <- c("B13_ROI7","B13_ROI8","B13_ROI9","B16_ROI5","B16_ROI9","B16_ROI12","B16_ROI13")
+    tissue <- "IM"
 
-for (ROI in ROIs) {
-    VisTypeMaskChannel(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath, ChannelPath, SavePath = paste0("/mnt/data/lyx/IMC/analysis/spatial/imgOutput/", tissue, "/"))
+    sce_ <- sce[, sce$Tissue == tissue]
+
+    ROIs <- names(table(sce_$ID))
+
+    CellMaskPath <- "/mnt/data/lyx/IMC/unet/predictionProbability/ori_cellmask/"
+    ChannelPath <- "/mnt/data/lyx/IMC/IMCell_Output/save_img/raw/"
+
+    channels2plot <- c("CD57", "FoxP3", "CD279")
+    celltypes2plot <- c("Mono_CD57")
+
+    # ROIs <- c("B13_ROI7","B13_ROI8","B13_ROI9","B16_ROI5","B16_ROI9","B16_ROI12","B16_ROI13")
+
+    for (ROI in ROIs) {
+        VisTypeMaskChannel(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath, ChannelPath, SavePath = paste0("/mnt/data/lyx/IMC/analysis/spatial/imgOutput/", tissue, "/"))
+    }
 }
-}
-

@@ -12,7 +12,10 @@ library(ggcor)
 library(ggridges)
 library(RColorBrewer)
 library(ggpointdensity)
-library(viridis)
+library(tidyverse)
+library(ggthemes)
+library(dplyr)
+library(patchwork)
 
 ## Plot the marker distribution from different batch
 PlotMarkerExpDistribution <- function(sce, savePath) {
@@ -54,8 +57,86 @@ SCE_Transform <- function(scedf, assay_col, cellmeta_col, clinical = NULL) {
   return(sce)
 }
 
+## Multiple clinical cross boxplot
+CrossBoxplotForAbundance <- function(countdf, celltype, TypeName = NULL, clinicalFeatures, savePath) {
+  if (length(celltype) > 1) {
+    countdf[, TypeName] <- apply(countdf[, celltype], MARGIN = 1, FUN = "sum")
+  } else {
+    TypeName <- celltype
+  }
+  df <- countdf[, c(TypeName, clinicalFeatures)]
+  colnames(df)[1] <- "Abundance"
+
+  # Create long format dataframe for clinical features
+  long_df <- df %>% tidyr::pivot_longer(cols = starts_with(clinicalFeatures[-1]), names_to = "Feature", values_to = "Value")
+  long_df$Group <- paste0(long_df$Tissue, "_", long_df$Feature, "_", long_df$Value)
+
+  # Compute percentiles and median for each Group (Tissue), Celltype, and Feature
+  summary_stats <- long_df %>%
+    group_by(Group) %>%
+    summarise(
+      Q1 = quantile(Abundance, 0.25),
+      Median = median(Abundance),
+      Q3 = quantile(Abundance, 0.75)
+    )
+
+  # Add the approximate x-axis positions for the labels and dashed lines
+  total_features <- length(unique(long_df$Group))
+  features_per_class <- total_features / 3
+  label_positions <- seq(features_per_class / 2, (total_features - features_per_class / 2), length.out = 3)
+  dashed_line_positions <- seq(features_per_class, total_features - features_per_class, length.out = 2)
+  class_labels <- data.frame(
+    Class = c("CT", "IM", "TAT"),
+    LabelPosition = label_positions
+  )
+  # Create a named vector for new labels
+  new_labels <- c(
+    "CT_Age_60_0" = "Age<60", "IM_Age_60_0" = "Age<60", "TAT_Age_60_0" = "Age<60",
+    "CT_Age_60_1" = "Age>=60", "IM_Age_60_1" = "Age>=60", "TAT_Age_60_1" = "Age>=60",
+    "CT_RFS_status_0" = "Non-Relapse", "IM_RFS_status_0" = "Non-Relapse", "TAT_RFS_status_0" = "Non-Relapse",
+    "CT_RFS_status_1" = "Relapse", "IM_RFS_status_1" = "Relapse", "TAT_RFS_status_1" = "Relapse",
+    "CT_Gender_0" = "Male", "IM_Gender_0" = "Male", "TAT_Gender_0" = "Male",
+    "CT_Gender_1" = "Female", "IM_Gender_1" = "Female", "TAT_Gender_1" = "Female",
+    "TAT_fong_score_4_1" = "FongScore>=4", "IM_fong_score_4_1" = "FongScore>=4", "CT_fong_score_4_1" = "FongScore>=4",
+    "CT_fong_score_4_0" = "FongScore<4", "IM_fong_score_4_0" = "FongScore<4", "TAT_fong_score_4_0" = "FongScore<4",
+    "TAT_KRAS_mutation_1" = "KRAS Mut", "IM_KRAS_mutation_1" = "KRAS Mut", "CT_KRAS_mutation_1" = "KRAS Mut",
+    "CT_KRAS_mutation_0" = "WT", "IM_KRAS_mutation_0" = "WT", "TAT_KRAS_mutation_0" = "WT",
+    "TAT_TBS_8_0" = "TBS<8", "CT_TBS_8_0" = "TBS<8", "IM_TBS_8_0" = "TBS<8",
+    "IM_TBS_8_1" = "TBS>=8", "CT_TBS_8_1" = "TBS>=8", "TAT_TBS_8_1" = "TBS>=8",
+    "TAT_Differential_grade_1" = "Moderately Differntiate", "CT_Differential_grade_1" = "Moderately Differntiate", "IM_Differential_grade_1" = "Moderately Differntiate",
+    "IM_Differential_grade_0" = "Lowly Differntiate", "CT_Differential_grade_0" = "Lowly Differntiate", "TAT_Differential_grade_0" = "Lowly Differntiate"
+  )
+
+  # Create custom cross-boxplot for each clinical feature group
+  p <- ggplot(long_df, aes(x = Group, y = Abundance, group = Feature)) +
+    geom_point(aes(color = Group), alpha = 0.5, size = 0.5, position = position_jitter(width = 0.15)) +
+    geom_crossbar(data = summary_stats, aes(x = Group, y = Median, ymin = Median, ymax = Median), width = 0.5, color = "black", size = 1.0, inherit.aes = FALSE) +
+    geom_errorbar(data = summary_stats, aes(x = Group, ymin = Q1, ymax = Q3), width = 0, color = "black", size = 0.5, inherit.aes = FALSE) +
+    geom_text(data = class_labels, aes(x = LabelPosition, y = (max(long_df$Abundance) + 0.25), label = Class), size = 5, inherit.aes = FALSE) +
+    geom_vline(xintercept = (dashed_line_positions + 0.5), linetype = "dashed", color = "black", size = 1) +
+    scale_x_discrete(labels = new_labels) +
+    scale_color_igv() +
+    labs(x = "Tissue", y = "Abundance", title = "Cell Subpopulation Differences for Each Clinical Feature Group") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(colour = "black"),
+      axis.text = element_text(size = 8),
+      axis.title = element_text(size = 14, face = "bold"),
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5),
+      plot.margin = margin(15, 15, 15, 15)
+    )
+
+  pdf(paste0(savePath, "Abudance Cross boxplot of ", TypeName, ".pdf"), height = 6, width = 8)
+  print(p)
+  dev.off()
+}
+
 ## transfer sce to cell counts matrix
-Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatures, is.fraction = FALSE) {
+Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatures, type = "SubType", is.fraction = FALSE) {
   if (length(group) == 2) {
     sceobj <- sceobj[, sceobj$Tissue == group[1] | sceobj$Tissue == group[2]]
   }
@@ -68,7 +149,7 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatur
   ## ROI, major celltype and cell subtype names and other clinical information
   ROIs <- names(table(cellMeta$ID))
 
-  SubTypes <- names(table(cellMeta$SubType))
+  SubTypes <- names(table(cellMeta[, type]))
   alltypes <- unique(c(SubTypes))
 
   CellCountMat <- matrix(data = NA, nrow = length(ROIs), ncol = (length(alltypes)))
@@ -83,7 +164,7 @@ Transform_CellCountMat <- function(sceobj, group = c("IM", "CT"), clinicalFeatur
     cellnum <- nrow(coldataTemp)
 
     ## count cells
-    SubTem <- as.data.frame(t(table(coldataTemp$SubType)))
+    SubTem <- as.data.frame(t(table(coldataTemp[, type])))
     if (is.fraction) {
       CellCountMat[match(ROI, rownames(CellCountMat)), match(SubTem$Var2, colnames(CellCountMat))] <- SubTem$Freq / cellnum
     }
@@ -348,7 +429,7 @@ MultiCliDotplot <- function(plotdf, tissue, savePath) {
 }
 
 ## abundance boxplot
-abundanceBoxplotMat <- function(plotdf, celltypes2Plot = NULL, MetaCol, expCol, filename) {
+abundanceBoxplotMat <- function(plotdf, celltypes2Plot = NULL, MetaCol, expCol) {
   plotdf2 <- CountMat2Plotdf(plotdf, MetaCol, expCol)
 
   if (is.null(celltypes2Plot)) {
@@ -357,6 +438,31 @@ abundanceBoxplotMat <- function(plotdf, celltypes2Plot = NULL, MetaCol, expCol, 
     plotdf3 <- plotdf2[plotdf2$Celltype %in% celltypes2Plot, ]
     return(plotdf3)
   }
+}
+
+## Boxplot for cell subpopulations under certain clinical groups
+AbundanceBoxPlot <- function(countdf, celltypes2Plot, expCol, tissueCol, clinicalGroupCol, ClinicalGroupName) {
+  AbunBoxDF <- abundanceBoxplotMat(countdf, celltypes2Plot, MetaCol = c(tissueCol, clinicalGroupCol), expCol = expCol)
+
+  AbunBoxDF[, clinicalGroupCol] <- as.factor(ifelse(AbunBoxDF[, clinicalGroupCol] == 1, ClinicalGroupName[1], ClinicalGroupName[2]))
+  colnames(AbunBoxDF)[ncol(AbunBoxDF)] <- "ClinicalGroup"
+
+  p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = ClinicalGroup)) +
+    geom_boxplot(alpha = 0.7) +
+    scale_y_continuous(name = "Cell Abundance") +
+    scale_x_discrete(name = "Cell Population") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold"),
+      text = element_text(size = 12),
+      axis.title = element_text(face = "bold"),
+      axis.text.x = element_text(size = 11, angle = 90)
+    ) +
+    facet_wrap(~Celltype, ncol = 2) +
+    scale_fill_lancet() +
+    stat_compare_means(aes(group = ClinicalGroup), label.y = 0.4, method = "t.test", label = "p.signif")
+
+  return(p)
 }
 
 ## Convert count matrix into plot dataframe
@@ -696,6 +802,98 @@ BarPlotForCelltypeFraction <- function(sce, rowSep, colSep, savePath) {
       }
     }
   }
+
+  return(NULL)
+}
+
+BarPlotForCelltypeFraction2 <- function(sce, rowSep, colSep, savePath) {
+  meta <- colData(sce)
+
+  Majortypes <- meta[, "MajorType"]
+  majortypes <- names(table(Majortypes))
+  Subtypes <- meta[, "SubType"]
+  IDs <- meta[, "ID"]
+  Tissues <- meta[, rowSep]
+  Groups <- meta[, colSep]
+
+  plotdf <- cbind(Majortypes, Subtypes, IDs, Tissues, Groups)
+  plotdf <- as.data.frame(plotdf)
+  colnames(plotdf) <- c("Majortype", "Subtype", "ROI", "Tissue", "Relapse")
+
+  df <- plotdf[, c(2, 3, 4)]
+  # Calculate the total cell count for each ROI and Tissue combination
+  cell_count <- df %>%
+    group_by(ROI, Tissue) %>%
+    summarise(Total = n())
+
+  # Calculate the cell count for each Subtype, ROI, and Tissue combination
+  subtype_count <- df %>%
+    group_by(Subtype, ROI, Tissue) %>%
+    summarise(Count = n())
+
+  # Calculate cell fraction for each Subtype, ROI, and Tissue combination
+  cell_fraction <- subtype_count %>%
+    inner_join(cell_count, by = c("ROI", "Tissue")) %>%
+    mutate(Fraction = Count / Total) %>%
+    select(Subtype, ROI, Tissue, Fraction)
+
+  # Create a data frame with unique Subtype and Tissue combinations
+  roi_tissue <- unique(df[, c("ROI", "Tissue")])
+
+  # Order ROIs based on Tissue
+  roi_tissue <- roi_tissue %>%
+    arrange(Tissue, ROI)
+
+  # Create a color palette for the subtypes
+  subtype_palette <- c(pal_lancet("lanonc")(7),pal_jama("default")(7),pal_jco("default")(10))
+
+  # Create the ggplot stacked bar plot with enhanced visual style
+  p <- ggplot(cell_fraction, aes(x = factor(ROI, levels = roi_tissue$ROI), y = Fraction, fill = Subtype)) +
+    geom_bar(stat = "identity", color = "black", width = 1) +
+    labs(x = "", y = "Cell Fraction", title = "Cell Fractions in Each ROI by Tissue") +
+    scale_fill_manual(values = subtype_palette) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"),
+      axis.text.x = element_blank(),
+      axis.text.y = element_text(size = 12),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      panel.background = element_blank(),
+      legend.position = "top",
+      legend.title = element_blank()
+    )
+
+  # Create the tissue color bar below the stacked bar plot
+  color_bar <- ggplot(roi_tissue, aes(x = factor(ROI, levels = ROI), y = 0.5, fill = Tissue)) +
+    geom_bar(stat = "identity", width = 1) +
+    labs(x = "", y = "Tissue") +
+    scale_fill_brewer(palette = "Set2") +
+    theme_minimal() +
+    theme(
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      panel.background = element_blank(),
+      legend.position = "bottom"
+    )
+
+  # Reduce the space between the main plot and the color bar
+  p <- p + theme(plot.margin = margin(t = 0, r = 0, b = -10, l = 0, unit = "pt"))
+  color_bar <- color_bar + theme(plot.margin = margin(t = -10, r = 0, b = 0, l = 0, unit = "pt"))
+
+  # Combine the stacked bar plot and the color bar using the cowplot package
+  combined_plot <- p / color_bar
+  combined_plot <- combined_plot + plot_layout(heights = c(14, 1))
+
+  pdf(paste0(savePath, "Abundance Barplot from tissues.pdf"), width = 15, height = 8)
+  print(combined_plot)
+  dev.off()
 
   return(NULL)
 }

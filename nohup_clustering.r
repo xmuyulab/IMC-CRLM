@@ -131,7 +131,7 @@ if (F) {
 
         ## form targets to multiple precess
         cat("Form the multi-process targets", "\n")
-        phenoks <- c(25,20, 15, 10)
+        phenoks <- c(25, 20, 15, 10)
         Type <- c("Lymphocyte", "Myeloid", "Stromal", "Tumor")
 
         targets <- list()
@@ -158,7 +158,7 @@ if (T) {
     cat("Loading Major annotation", "\n")
     bestnorm_expPath <- paste0(savePath, "annotate_allcells.rds")
     bestnorm_exp <- readRDS(bestnorm_expPath)
-    
+
     bestnorm_exp[which(bestnorm_exp$SubType == "UNKNOWN"), ]$MajorType <- "UNKNOWN"
     markers <- unique(c(MarkerList[[2]], MarkerList[[3]], MarkerList[[4]], MarkerList[[5]], MarkerList[[6]]))
 

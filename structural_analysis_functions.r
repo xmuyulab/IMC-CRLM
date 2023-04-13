@@ -122,7 +122,7 @@ HeatmapForCelltypeInNeighbor <- function(sce, colname1, colname2, savePath) {
     p <- pheatmap(plotdf,
         color = color, scale = "column",
         cluster_rows = F, cluster_cols = T,
-        legend_labels = c("Abundance high", "Abundance low"), legend = T,
+        # legend_labels = c("Abundance high", "Abundance low"), legend = T,
         show_rownames = T, show_colnames = T
     )
 
@@ -295,9 +295,9 @@ BoxPlotForCellular <- function(mat1, mat2, sep, groups, valueCol, savePath) {
             axis.text.x = element_text(size = 11, angle = 90)
         ) +
         scale_fill_manual(values = c("#5494cc", "#e18283")) +
-        stat_compare_means(aes(group = Group), label.y = 0.8, method = "t.test", label = "p.signif")
+        stat_compare_means(aes(group = Group), label.y = 0.8, method = "t.test", label = "p.format")
 
-    pdf(paste0(savePath, "Cellular Neighborhood pattern difference of ", sep, ".pdf"), height = 6, width = 8)
+    pdf(paste0(savePath, "Cellular Neighborhood pattern difference of ", sep, ".pdf"), height = 6, width = 12)
     print(p)
     dev.off()
 
@@ -751,43 +751,74 @@ FCandPvalueCal <- function(mat, xCol, yCol, need.sample = FALSE) {
 }
 
 ## Plot volcano plot
-VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filename = NULL) {
+VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filename = NULL, Qvalue = F) {
+    ## Fold change
     df$Foldchange <- as.numeric(df$Foldchange)
     df$P.value <- as.numeric(df$P.value)
 
-    df$change <- as.factor(ifelse(df$P.value < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold),
-        ifelse(log2(df$Foldchange) > log2(fcthreshold), "Up-regulate", "Down-regulate"), "Non-significant"
-    ))
+    ## p value
+    if (Qvalue) {
+        df$Q.value <- p.adjust(df$P.value, method = "BH")
+        df$change <- as.factor(ifelse(df$Q.value < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold),
+            ifelse(log2(df$Foldchange) > log2(fcthreshold), "Up-regulate", "Down-regulate"), "Non-significant"
+        ))
 
-    # 样本标签
-    df$label <- ifelse(df[, 3] < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold), as.character(df[, 1]), "")
+        ## label
+        df$label <- ifelse(df[, "Q.value"] < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold), as.character(df[, 1]), "")
 
-    # 绘制火山图
-    p.vol <- ggplot(
-        data = df,
-        aes(x = log2(Foldchange), y = -log10(P.value), colour = change, fill = change)
-    ) +
-        scale_color_manual(values = c("Down-regulate" = "blue", "Non-significant" = "grey", "Up-regulate" = "red")) +
-        geom_point(alpha = 0.4, size = 3.5) +
-        # 标签
-        geom_text_repel(aes(x = log2(Foldchange), y = -log10(P.value), label = label),
-            size = 3,
-            box.padding = unit(0.6, "lines"), point.padding = unit(0.7, "lines"),
-            segment.color = "black", show.legend = FALSE
+        ## plot
+        p.vol <- ggplot(
+            data = df,
+            aes(x = log2(Foldchange), y = -log10(Q.value), colour = change, fill = change)
         ) +
-        # 辅助线
-        geom_vline(xintercept = c(-(log2(fcthreshold)), (log2(fcthreshold))), lty = 4, col = "black", lwd = 0.8) +
-        geom_hline(yintercept = -log10(pthreshold), lty = 4, col = "black", lwd = 0.8) +
-        theme_bw() +
-        labs(x = "log2(Fold Change)", y = "-log10(P value)", title = paste0("Volcano Plot of Different Expression Markers in ", feature)) +
-        # 坐标轴标题、标签和图例相关设置
-        theme(
-            axis.text = element_text(size = 11), axis.title = element_text(size = 13), # 坐标轴标签和标题
-            plot.title = element_text(hjust = 0.5, size = 15, face = "bold"), # 标题
-            legend.text = element_text(size = 11), legend.title = element_text(size = 13), # 图例标签和标题
-            plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")
-        ) # 图边距
+            scale_color_manual(values = c("Down-regulate" = "blue", "Non-significant" = "grey", "Up-regulate" = "red")) +
+            geom_point(alpha = 0.4, size = 3.5) +
+            geom_text_repel(aes(x = log2(Foldchange), y = -log10(Q.value), label = label),
+                size = 3,
+                box.padding = unit(0.6, "lines"), point.padding = unit(0.7, "lines"),
+                segment.color = "black", show.legend = FALSE
+            ) +
+            geom_vline(xintercept = c(-(log2(fcthreshold)), (log2(fcthreshold))), lty = 4, col = "black", lwd = 0.8) +
+            geom_hline(yintercept = -log10(pthreshold), lty = 4, col = "black", lwd = 0.8) +
+            theme_bw() +
+            labs(x = "log2(Fold Change)", y = "-log10(Q value)", title = paste0("Volcano Plot of Different Expression Markers in ", feature)) +
+            theme(
+                axis.text = element_text(size = 11), axis.title = element_text(size = 13),
+                plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
+                legend.text = element_text(size = 11), legend.title = element_text(size = 13),
+                plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")
+            )
+    } else {
+        df$change <- as.factor(ifelse(df$P.value < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold),
+            ifelse(log2(df$Foldchange) > log2(fcthreshold), "Up-regulate", "Down-regulate"), "Non-significant"
+        ))
 
+        ## label
+        df$label <- ifelse(df[, 3] < pthreshold & abs(log2(df$Foldchange)) > log2(fcthreshold), as.character(df[, 1]), "")
+
+        ## plot
+        p.vol <- ggplot(
+            data = df,
+            aes(x = log2(Foldchange), y = -log10(P.value), colour = change, fill = change)
+        ) +
+            scale_color_manual(values = c("Down-regulate" = "blue", "Non-significant" = "grey", "Up-regulate" = "red")) +
+            geom_point(alpha = 0.4, size = 3.5) +
+            geom_text_repel(aes(x = log2(Foldchange), y = -log10(P.value), label = label),
+                size = 3,
+                box.padding = unit(0.6, "lines"), point.padding = unit(0.7, "lines"),
+                segment.color = "black", show.legend = FALSE
+            ) +
+            geom_vline(xintercept = c(-(log2(fcthreshold)), (log2(fcthreshold))), lty = 4, col = "black", lwd = 0.8) +
+            geom_hline(yintercept = -log10(pthreshold), lty = 4, col = "black", lwd = 0.8) +
+            theme_bw() +
+            labs(x = "log2(Fold Change)", y = "-log10(P value)", title = paste0("Volcano Plot of Different Expression Markers in ", feature)) +
+            theme(
+                axis.text = element_text(size = 11), axis.title = element_text(size = 13),
+                plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
+                legend.text = element_text(size = 11), legend.title = element_text(size = 13),
+                plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")
+            )
+    }
     ggsave(p.vol, filename = filename)
 
     return(NULL)
@@ -802,12 +833,21 @@ AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType
         CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = FALSE)
         if (cutoffType == "median") {
             Cutoff <- median(CountMat[, "Pheno_pos"])
+            cat("The median cutoff is ", Cutoff, "\n")
         }
         if (cutoffType == "mean") {
             Cutoff <- mean(CountMat[, "Pheno_pos"])
+            cat("The mean cutoff is ", Cutoff, "\n")
         }
         if (cutoffType == "manual") {
             Cutoff <- cutoffValue
+            cat("The manual cutoff is ", Cutoff, "\n")
+        }
+        if (cutoffType == "best") {
+            df <- CountMat[, c("Pheno_pos", "RFS_time", "RFS_status")]
+            cutpoint <- surv_cutpoint(data = df, time = "RFS_time", event = "RFS_status", variables = "Pheno_pos")
+            Cutoff <- summary(cutpoint)$cutpoint
+            cat("The best cutoff is ", Cutoff, "\n")
         }
 
         RList <- list()
@@ -815,6 +855,12 @@ AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType
         if (numGroup == 2) {
             RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
             RList[["low_ROI"]] <- allROIs[!allROIs %in% c(RList[["high_ROI"]])]
+            if (length(RList[["low_ROI"]]) <= 5 | length(RList[["high_ROI"]]) <= 5) {
+                Cutoff <- mean(CountMat[, "Pheno_pos"])
+                RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
+                RList[["low_ROI"]] <- allROIs[!allROIs %in% c(RList[["high_ROI"]])]
+                cat("Using best cutoff cause unbalance, shift to using mean as cutoff", "\n")
+            }
         }
         if (numGroup == 3) {
             RList[["high_ROI"]] <- rownames(CountMat[which(CountMat[, "Pheno_pos"] >= Cutoff), ])
@@ -1264,15 +1310,13 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, save
     if (adjust.p) {
         plotdf$Qvalue <- p.adjust(PVec, method = "BH")
         plotdf$Qlabel <- cut(plotdf$Qvalue, breaks = c(0, 0.001, 0.01, 0.05, 1), labels = c(8, 6, 4, 2))
-        plotdf$Qlabel <- as.factor(as.numeric(as.character(plotdf$Qlabel))) 
-    }
-    else{
+        plotdf$Qlabel <- as.factor(as.numeric(as.character(plotdf$Qlabel)))
+    } else {
         plotdf$Plabel <- cut(plotdf$Pvalue, breaks = c(0, 0.001, 0.01, 0.05, 1), labels = c(8, 6, 4, 2))
         plotdf$Plabel <- as.factor(plotdf$Plabel)
-                plotdf$Plabel <- as.factor(as.numeric(as.character(plotdf$Plabel))) 
-
+        plotdf$Plabel <- as.factor(as.numeric(as.character(plotdf$Plabel)))
     }
-    
+
     p <- ggplot(data = plotdf, aes(x = Subtype, y = Marker)) +
         geom_point(aes(size = Qlabel, fill = FoldChange), shape = 22, color = "grey80") +
         scale_fill_gradient2(low = "#445393", high = "#EE2627", mid = "white") +
@@ -1291,36 +1335,6 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, save
     pdf(paste0(savePath, "alltypes differential markers in relapse.pdf"), width = 8, height = 6)
     print(p)
     dev.off()
-
-    ## Heatmap
-    if (F) {
-        pMat <- matrix(data = 0, nrow = length(markers), ncol = length(celltypes))
-        rownames(pMat) <- markers
-        colnames(pMat) <- celltypes
-
-        FCMat <- pMat
-
-        i <- 1
-        for (interstSubType in celltypes) {
-            sce_ <- sce[, sce$SubType %in% interstSubType]
-            mat <- as.data.frame(t(assay(sce_)[markers, ]))
-            mat$classLabel <- colData(sce_)[, groupCol]
-            FCDF <- FCandPvalueCal(mat, xCol = c(1, length(markers)), yCol = (length(markers) + 1), need.sample = TRUE)
-
-            FCMat[, i] <- as.numeric(FCDF[, 2])
-            pMat[, i] <- as.numeric(FCDF[, 3])
-            i <- i + 1
-        }
-        pMat <- as.data.frame(pMat)
-        FCMat <- as.data.frame(FCMat)
-
-        FCMat <- apply(FCMat, MARGIN = 1, function(x) {
-            return(ifelse(x != 0, log2(x), 0))
-        })
-        pMat <- apply(pMat, MARGIN = 1, function(x) {
-            return(ifelse(x != 0, (-log10(x + 0.0001)), 0))
-        })
-    }
 
     return(NULL)
 }

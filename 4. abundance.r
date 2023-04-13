@@ -68,7 +68,7 @@ table(sce$Batch)
 PlotMarkerExpDistribution(sce, savePath)
 
 ## cell type fraction barplot
-BarPlotForCelltypeFraction(sce, rowSep = "Tissue", colSep = "RFS_status", savePath)
+BarPlotForCelltypeFraction2(sce, rowSep = "Tissue", colSep = "RFS_status", savePath)
 
 ## Density dotplot
 savePathTemp <- "/mnt/data/lyx/IMC/analysis/clustering/"
@@ -77,10 +77,10 @@ sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
 sce <- sce[, sce$Tissue == "IM"]
 rownames(sce)
 
-PlotDensityDotplot(sce, marker1 = "CD20", marker2 = "CD3", MajorType = "Lymphocyte", sampleSize = 50000, savePathTemp)
-PlotDensityDotplot(sce, marker1 = "EpCAM", marker2 = "CD274", MajorType = "Tumor", sampleSize = 50000, savePathTemp)
-PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD274", MajorType = "Monocyte", sampleSize = 50000, savePathTemp)
-PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD279", MajorType = "Monocyte", sampleSize = 50000, savePathTemp)
+# PlotDensityDotplot(sce, marker1 = "CD20", marker2 = "CD3", MajorType = "Lymphocyte", sampleSize = 50000, savePathTemp)
+# PlotDensityDotplot(sce, marker1 = "EpCAM", marker2 = "CD274", MajorType = "Tumor", sampleSize = 50000, savePathTemp)
+# PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD274", MajorType = "Monocyte", sampleSize = 50000, savePathTemp)
+# PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD279", MajorType = "Monocyte", sampleSize = 50000, savePathTemp)
 
 
 ## downstream analysis
@@ -99,43 +99,29 @@ ClassifyCF <- c(
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = ClassifyCF, is.fraction = T)
 colnames(countdf)
 
-xCol <- c(1, 25)
+xCol <- c(1, 21)
 clinicalFeatures <- ClassifyCF[-1] ## -1: remove tissue
 for (tissue in c("IM", "CT", "TAT")) {
     CountMAT <- abundanceDotPlotMat(countdf, xCol = xCol, clinicalFeatures = clinicalFeatures, tissue = tissue)
     MultiCliDotplot(CountMAT, tissue = tissue, savePath)
 }
 
+## Singletype abundance in multiple clincial groups
+ClassifyCF <- c("Tissue", "RFS_status", "fong_score_4", "Gender", "Age_60", "KRAS_mutation", "TBS_8", "Differential_grade")
+countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = ClassifyCF, is.fraction = T)
+dim(countdf)
+CrossBoxplotForAbundance(countdf, celltype = c("CD4T", "CD8T"), TypeName = "T cell", clinicalFeatures = ClassifyCF, savePath = savePath)
+CrossBoxplotForAbundance(countdf, celltype = c("B", "CD4T", "CD8T", "NK"), TypeName = "Lymphocyte", clinicalFeatures = ClassifyCF, savePath = savePath)
 
 ## Abundance Boxplot of relapse
 clinicalFeatures <- c("Tissue", "RFS_status")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 
-dim(countdf)
-head(countdf)
-
-celltypes2Plot <- c("B", "CD4T", "CD8T", "NK", "CD366+ CD4T", "Treg", "Macro_CD163", "Macro_CD11b", "Macro_CD169", "Macro_HLADR", "TC_Ki67")
+celltypes2Plot <- c("B", "CD4T", "CD8T", "Macro_CD163")
 # celltypes2Plot <- colnames(countdf)[xCol[1]:xCol[2]]
-AbunBoxDF <- abundanceBoxplotMat(countdf, celltypes2Plot, MetaCol = c("Tissue", "RFS_status"), expCol = xCol)
 
-AbunBoxDF$RFS_status <- as.factor(ifelse(AbunBoxDF$RFS_status == 1, "Relapse", "Non-Relapse"))
-
-p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = RFS_status)) +
-    geom_boxplot(alpha = 0.7) +
-    scale_y_continuous(name = "Cell Abundance") +
-    scale_x_discrete(name = "Cell Population") +
-    theme_bw() +
-    theme(
-        plot.title = element_text(size = 14, face = "bold"),
-        text = element_text(size = 12),
-        axis.title = element_text(face = "bold"),
-        axis.text.x = element_text(size = 11, angle = 90)
-    ) +
-    facet_wrap(~Celltype, ncol = 3) +
-    scale_fill_lancet() +
-    stat_compare_means(aes(group = RFS_status), label.y = 0.4, method = "t.test")
-
-pdf("/mnt/data/lyx/IMC/analysis/abundance/relapse_abundance_analysis.pdf", width = 15, height = 10)
+p <- AbundanceBoxPlot(countdf, celltypes2Plot, expCol = xCol, tissueCol = "Tissue", clinicalGroupCol = "RFS_status", ClinicalGroupName = c("Relapse", "NonRelapse"))
+pdf("/mnt/data/lyx/IMC/analysis/abundance/relapse_abundance_analysis.pdf", width = 6, height = 4)
 print(p)
 dev.off()
 
@@ -143,32 +129,12 @@ dev.off()
 clinicalFeatures <- c("Tissue", "KRAS_mutation")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
 
-dim(countdf)
-head(countdf)
-
-celltypes2Plot <- c("B", "CD4T", "CD8T", "NK", "CD366+ CD4T", "Treg", "Macro_CD163", "Macro_CD11b", "Macro_CD169", "Macro_HLADR", "TC_CAIX")
-AbunBoxDF <- abundanceBoxplotMat(countdf, celltypes2Plot, MetaCol = c("Tissue", "KRAS_mutation"), expCol = xCol)
-
-AbunBoxDF$KRAS_mutation <- as.factor(ifelse(AbunBoxDF$KRAS_mutation == 1, "KRAS Mutation", "WT"))
-
-p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = KRAS_mutation)) +
-    geom_boxplot(alpha = 0.7) +
-    scale_y_continuous(name = "Cell Abundance") +
-    scale_x_discrete(name = "Cell Population") +
-    theme_bw() +
-    theme(
-        plot.title = element_text(size = 14, face = "bold"),
-        text = element_text(size = 12),
-        axis.title = element_text(face = "bold"),
-        axis.text.x = element_text(size = 11, angle = 90)
-    ) +
-    facet_wrap(~Celltype, ncol = 3) +
-    scale_fill_lancet() +
-    stat_compare_means(aes(group = KRAS_mutation), label.y = 0.5, method = "t.test")
-
-pdf("/mnt/data/lyx/IMC/analysis/abundance/kras_abundance_analysis.pdf", width = 15, height = 8)
+celltypes2Plot <- c("CD4T", "CD8T", "TC_CAIX")
+p <- AbundanceBoxPlot(countdf, celltypes2Plot, expCol = xCol, tissueCol = "Tissue", clinicalGroupCol = "KRAS_mutation", ClinicalGroupName = c("KRAS Mutation", "WT"))
+pdf("/mnt/data/lyx/IMC/analysis/abundance/kras_abundance_analysis.pdf", width = 6, height = 4)
 print(p)
 dev.off()
+
 
 
 ## KM curve

@@ -348,7 +348,7 @@ if (T) {
 }
 
 ############### Lymphocyte
-Lymnorm_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Lymphocyte_qc5_norm_Idenmarker_flowsom_pheno_k25.csv"
+Lymnorm_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Lymphocyte_qc5_norm_Idenmarker_flowsom_pheno_k15.csv"
 Lymnorm_exp <- read.csv(Lymnorm_expPath)
 
 dim(Lymnorm_exp)
@@ -356,11 +356,12 @@ colnames(Lymnorm_exp)
 Lymnorm_exp$SubType <- NA
 
 LymphTypeList <- c(
-    "CD4T", "CD8T", "CD8T", "CD4T", "B",
-    "CD4T", "CD8T", "NK", "B", "CD366+ CD4T",
-    "UNKNOWN", "CD4T", "CD4T", "CD366+ CD4T", "UNKNOWN",
-    "UNKNOWN", "UNKNOWN", "UNKNOWN", "Treg", "UNKNOWN",
-    "Treg", "Treg", "NK"
+    "B", "B", "UNKNOWN", "UNKNOWN", "B",
+    "CD4T", "UNKNOWN", "UNKNOWN", "UNKNOWN", "NK",
+    "UNKNOWN", "CD8T", "CD4T", "CD4T", "CD4T",
+    "CD4T", "UNKNOWN", "CD4T", "CD4T", "NK",
+    "NK", "CD8T", "Treg", "NK", "CD4T",
+    "Treg", "CD8T", "CD4T", "CD8T", "Treg"
 )
 
 clusterids <- as.numeric(names(table(Lymnorm_exp$Lymphocyte_flowsom100pheno15)))
@@ -372,7 +373,7 @@ colnames(Lymnorm_exp)
 bestnorm_exp[match(Lymnorm_exp$CellID, bestnorm_exp$CellID), ]$SubType <- Lymnorm_exp$SubType
 
 ############ Myeloid
-Myeloid_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Myeloid_qc5_norm_Idenmarker_flowsom_pheno_k20.csv"
+Myeloid_expPath <- "/mnt/data/lyx/IMC/analysis/clustering/Myeloid_qc5_norm_Idenmarker_flowsom_pheno_k15.csv"
 Myeloid_exp <- read.csv(Myeloid_expPath)
 
 dim(Myeloid_exp)
@@ -380,14 +381,13 @@ colnames(Myeloid_exp)
 Myeloid_exp$SubType <- NA
 
 MyeloidTypeList <- c(
-    "Macro_CD163", "Macro_HLADR", "UNKNOWN", "Mono_Classic", "CLEC9A+ DC",
-    "Mono_Classic", "Macro_CD163", "Mono_Classic", "Mono_CD11c", "CD80+ DC",
-    "Mono_CD11c", "Mono_Classic", "CD80+ DC", "Mono_Intermediate", "UNKNOWN",
-    "Macro_CD163", "Mono_Intermediate", "Mono_Intermediate", "UNKNOWN", "Mono_Classic",
-    "Macro_CD163", "UNKNOWN", "Macro_CD169", "Macro_CD11b", "UNKNOWN",
-    "CD80+ DC", "UNKNOWN"
+    "Macro_CD169", "Macro_CD169", "Macro_CD163", "Macro_CD11b", "Macro_HLADR",
+    "Mono_CD11c", "Macro_HLADR", "UNKNOWN", "UNKNOWN", "Mono_Classic",
+    "UNKNOWN", "Mono_Classic", "UNKNOWN", "Mono_Intermediate", "Mono_Classic",
+    "UNKNOWN", "Mono_Classic", "Mono_Intermediate", "Mono_Classic", "Mono_CD11c",
+    "Mono_Intermediate", "Macro_CD163", "Mono_CD11c", "Macro_CD163", "Mono_CD11c",
+    "Macro_CD163", "Macro_CD163", "Macro_CD163", "Macro_CD163", "Mono_Classic"
 )
-
 clusterids <- as.numeric(names(table(Myeloid_exp$Myeloid_flowsom100pheno15)))
 for (clusterid in clusterids) {
     Myeloid_exp[Myeloid_exp$Myeloid_flowsom100pheno15 %in% clusterid, ]$SubType <- MyeloidTypeList[clusterid]
@@ -432,7 +432,7 @@ Tumor_exp$SubType <- NA
 
 TumorTypeList <- c(
     "UNKNOWN", "UNKNOWN", "TC_CAIX", "TC_CAIX", "TC_CAIX",
-    "TC_CAIX", "TC_CAIX", "TC_CAIX", "TC_CAIX", "TC_VEGF",
+    "TC_CAIX", "TC_CAIX", "TC_EpCAM", "TC_CAIX", "TC_VEGF",
     "TC_EpCAM", "UNKNOWN", "UNKNOWN", "TC_VEGF", "TC_EpCAM",
     "TC_EpCAM", "TC_EpCAM", "TC_Ki67", "TC_EpCAM", "TC_VEGF",
     "TC_EpCAM", "TC_EpCAM", "TC_EpCAM", "TC_Ki67", "TC_VEGF",
@@ -479,20 +479,20 @@ for (phenok in c(10, 20, 30, 40)) {
 Unknown_exp <- read.csv("/mnt/data/lyx/IMC/analysis/clustering/UNKNOWN_qc5_norm_Idenmarker_flowsom_pheno_k15.csv")
 Unknown_exp$SubType <- "UNKNOWN"
 UnknownMajor <- c(
-"Tumor", "Stromal", "Myeloid", "Myeloid", "Tumor",
-"Myeloid", "Tumor", "Lymphocyte", "Tumor", "UNKNOWN",
-"Tumor", "Stromal", "Lymphocyte", "Lymphocyte", "Tumor",
-"Lymphocyte", "Tumor", "Lymphocyte","Lymphocyte", "Myeloid",
-"UNKNOWN", "UNKNOWN", "Myeloid", "Lymphocyte", "UNKNOWN",
-"Myeloid", "Stromal", "Myeloid", "Myeloid","UNKNOWN"
+    "Myeloid", "Tumor", "Tumor", "UNKNOWN", "UNKNOWN",
+    "Myeloid", "Myeloid", "UNKNOWN", "Stromal", "Myeloid",
+    "Stromal", "Myeloid", "Stromal", "Myeloid", "Lymphocyte",
+    "Myeloid", "Tumor", "Tumor", "Myeloid", "Lymphocyte",
+    "Stromal", "Myeloid", "Myeloid", "Lymphocyte", "UNKNOWN",
+    "Myeloid", "Tumor", "Tumor", "Lymphocyte", "Lymphocyte"
 )
 UnknownMinor <- c(
-"TC_Ki67", "SC_aSMA", "Macro_CD11b", "Macro_HLADR", "TC_EpCAM",
-"Macro_HLADR", "TC_Ki67", "CD8T", "TC_CAIX", "UNKNOWN",
-"TC_EpCAM", "SC_COLLAGEN", "CD4T", "T_Exausted", "TC_EpCAM",
-"CD4T", "TC_EpCAM", "B", "CD27+ Cell", "Mono_CD11c",
-"UNKNOWN", "UNKNOWN", "CLEC9A+ DC", "CD366+ CD4T", "UNKNOWN",
-"CD80+ DC", "SC_FAP", "Mono_CD11c", "Macro_CD169","UNKNOWN"
+    "Macro_CD11b", "TC_VEGF", "TC_EpCAM", "UNKNOWN", "UNKNOWN",
+    "Mono_Classic", "Macro_CD163", "UNKNOWN", "SC_Vimentin", "Mono_CD11c",
+    "SC_FAP", "Mono_Classic", "SC_COLLAGEN", "Mono_CD11c", "NK",
+    "Mono_Classic", "TC_CAIX", "TC_EpCAM", "Macro_CD169", "Treg",
+    "SC_aSMA", "Mono_Intermediate", "Mono_CD11c", "Treg", "UNKNOWN",
+    "Macro_HLADR", "TC_Ki67", "TC_EpCAM", "CD8T", "B"
 )
 clusterids <- as.numeric(names(table(Unknown_exp$UNKNOWN_flowsom100pheno15)))
 for (clusterid in clusterids) {
@@ -509,17 +509,16 @@ table(bestnorm_exp$SubType)
 bestnorm_exp[which(bestnorm_exp$SubType == "UNKNOWN"), ]$MajorType <- "UNKNOWN"
 
 ## slightly chage
-bestnorm_exp[bestnorm_exp$SubType == "CLEC9A+ DC", ]$SubType <- "Macro_CD163"
 
 markersList <- c(
     "CD45", "CD20", "CD3", "CD8a", "CD4", "FoxP3", "CD57", ## Lymphocyte
     "HLADR", "CD68", "CD14", "CD11c", "CD11b", "CD16", "CLEC9A", "CD169", "CD163", ## Myeloid
     "CollagenI", "Vimentin", "AlphaSMA", "FAP", ## Stromal
-    "EpCAM", ## Tumor
-    "Ki67", "HK2", "FASN", "PRPS1", "GLUT1", ## Cell grouth
-    "VEGF", "CAIX", ## Hypoxia
-    "CD127", "CD27", "CD80", ## Immuno-activation
-    "CD274", "CD279", "TIGIT", "CD366" ## Immuno-checkpoint
+    "EpCAM", "Ki67", "HK2", "VEGF", "CAIX" ## Tumor
+    # "FASN", "PRPS1", "GLUT1", ## Cell grouth
+    # "VEGF", "CAIX", ## Hypoxia
+    # "CD127", "CD27", "CD80", ## Immuno-activation
+    # "CD274", "CD279", "TIGIT", "CD366" ## Immuno-checkpoint
 )
 
 MarkerHeatmap(bestnorm_exp, markersList, savePath)
