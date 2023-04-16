@@ -11,6 +11,7 @@ library(SingleCellExperiment)
 library(ggbeeswarm)
 library(Hmisc)
 library(ggcor)
+library(ggsci)
 
 ## clinical information
 load_clinical <- function(sce, clinicalFilePath) {
@@ -1140,6 +1141,61 @@ AbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, AbundanceDF3, groupsN
     dev.off()
 
     return(NULL)
+}
+
+## Swarm plot for high- and low- marker groups certain celltype
+MultipleAbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, AbundanceDF3, groupsName, PlotTypes, marker, numGroup = 3, style = "violin") {
+    if (numGroup == 2) {
+        Counts1 <- AbundanceDF1[, PlotTypes]
+        Counts2 <- AbundanceDF2[, PlotTypes]
+
+        ROIsVec <- c(rep(rownames(Counts1),times=ncol(Counts1)) , rep(rownames(Counts2),times=ncol(Counts2)))
+        CountsVec <- c(as.numeric(as.matrix(Counts1)), as.numeric(as.matrix(Counts2)))
+        CelltypeVec <- c(rep(colnames(Counts1),each=nrow(Counts1)),rep(colnames(Counts2),each=nrow(Counts2)))
+        GroupsVec <- c(rep(groupsName[1], length(as.matrix(Counts1))), rep(groupsName[2], length(as.matrix(Counts2))))
+
+        plotdf <- cbind(ROIsVec, CountsVec, CelltypeVec,GroupsVec)
+        plotdf <- as.data.frame(plotdf)
+        colnames(plotdf) <- c("ROI", "Count", "Celltype","Group")
+
+        plotdf$Count <- as.numeric(plotdf$Count)
+
+        ## Swarm plot
+        color <- pal_aaas("default")(10)[c(5, 7)]
+        p <- ggplot(data = plotdf, aes(x = Group, y = Count, color = Group, fill = Group))
+        if (style == "violin") {
+            p <- p + geom_violin(show.legend = FALSE, outlier.shape = NA, alpha = 0.8)
+        }
+        if (style == "box") {
+            p <- p + geom_boxplot(show.legend = FALSE, outlier.shape = NA, alpha = 0.8)
+        }
+  p <- p +
+  geom_jitter(width = 0.15, size = 2, alpha = 0.6) +
+  theme_bw() +
+  labs(x = NULL, y = "Count", title = "Box Plot of Counts by Group and Cell Type") +
+  scale_color_manual(values = color) +
+  scale_fill_manual(values = color) +
+  stat_compare_means(
+    aes(group = Group),
+    comparisons = list(c(groupsName[1], groupsName[2])),
+    method = "t.test",
+    label = "p.signif",
+    label.y = max(plotdf$Count) * 0.95,
+    size = 4
+  ) +
+  facet_wrap(~Celltype,nrow=2) +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    strip.text = element_text(size = 12, face = "bold"),
+    strip.background = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.grid.major = element_line(color = "gray", size = 0.5),
+    panel.grid.minor = element_blank()
+  )
+    }
+    return(p)
 }
 
 ## Survival analysis for Phenotype associated label

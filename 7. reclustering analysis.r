@@ -67,20 +67,33 @@ for (i in 1:length(anajorTypes)) {
 
     colnames(plotdf) <- c("ReCluster", "Abundance", "Group")
 
+    if (F) {
+        plotdf <- plotdf[plotdf$ReCluster %in% c("rec_13", "rec_8", "rec_5", "rec_12"), ]
+        rownames(plotdf) <- 1:nrow(plotdf)
+    }
+
     p <- ggplot(plotdf, aes(x = Group, y = Abundance, fill = Group)) +
-        geom_boxplot(alpha = 0.7) +
+        geom_boxplot(alpha = 0.7, color = "black", outlier.shape = NA) +
         scale_y_continuous(name = "Cell Abundance") +
         scale_x_discrete(name = "Cell Population") +
+        scale_fill_manual(values = c("#56B4E9", "#D55E00")) +
         theme_bw() +
         theme(
-            plot.title = element_text(size = 14, face = "bold"),
+            plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
             text = element_text(size = 12),
             axis.title = element_text(face = "bold"),
-            axis.text.x = element_text(size = 11, angle = 90)
+            axis.text.x = element_text(size = 11, angle = 90),
+            legend.position = "none",
+            strip.text = element_text(size = 12, face = "bold"),
+            strip.background = element_blank(),
+            panel.border = element_rect(color = "black", fill = NA, size = 1),
+            panel.grid.major = element_line(color = "gray", size = 0.5),
+            panel.grid.minor = element_blank()
         ) +
         stat_compare_means(aes(group = Group), label.y = .4, method = "t.test") +
         facet_wrap(~ReCluster, ncol = 4)
 
+    # pdf(paste0(savePathTemp1, "recluster_abundance_analysis(part).pdf"), width = 8, height = 4)
     pdf(paste0(savePathTemp1, "recluster_abundance_analysis.pdf"), width = 8, height = 6)
     print(p)
     dev.off()
@@ -162,6 +175,13 @@ for (i in 1:length(anajorTypes)) {
         AbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), celltype = celltype, marker = SubName, savePath = savePathTemp, numGroup = 2)
     }
 
+    #### Multiple cell subpopulations abudnace plot
+    PlotTypes <- c("CD8T", "Macro_HLADR", "Macro_CD11b", "Macro_CD163", "Macro_CD169", "Treg")
+    p <- MultipleAbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), PlotTypes = PlotTypes, marker = SubName, numGroup = 2, style = "box")
+    pdf(paste0(savePathTemp1, "ViolinPlot of multiple celltypes in ", marker, " group.pdf"), height = 10, width = 8)
+    print(p)
+    dev.off()
+
     #### CNPs
     k_structures <- names(table(colData(sce)[, structure]))
     savePathTemp <- paste0(savePathTemp1, "/StructureAbundance/")
@@ -218,6 +238,22 @@ DoubleHeat(MergeDF1, labelDF1,
 ### Different
 getInteracDiff(ResultPath, sce, celltypes = celltypes, savepath = paste0(savePathTemp1, SubName, "_Spatial_Diff_0.01.pdf"), IDs1 = high_ROI, IDs2 = low_ROI, Sig = 0.01)
 
+PlotTypes <- c("B", "CD4T", "CD8T", "Treg", "Macro_CD163", "Macro_CD169", "Mono_Classic", "Mono_Intermediate")
+p <- InterDiffInvertBarplot(
+    ResultPath = ResultPath, sce = sce, PlotTypes = PlotTypes,
+    IDs1 = high_ROI, IDs2 = low_ROI
+)
+pdf(paste0(savePathTemp1, SubName, "_Spatial_Diff_Barplot.pdf"), height = 6, width = 8)
+print(p)
+dev.off()
+
+p <- InterAbundanceBarplot(
+    ResultPath = ResultPath, sce = sce, PlotTypes = PlotTypes, groupsName = c("High", "Low"), IDs1 = high_ROI, IDs2 = low_ROI
+)
+pdf(paste0(savePathTemp1, SubName, "_SpatialAbundance.pdf"), height = 6, width = 10)
+print(p)
+dev.off()
+
 ### plot the cell subtype number different
 sceTemp1 <- sce[, sce$ID %in% high_ROI]
 HighCountMat1 <- GetAbundance(sceTemp1, countcol = "SubType", is.fraction = T)
@@ -230,7 +266,7 @@ lowCountMat2 <- GetAbundance(sceTemp2, countcol = structure, is.fraction = T)
 
 #### celltype
 celltypes <- names(table(sce$SubType))
-savePathTemp <- paste0(savePathTemp1, "/CellAbundance/")
+savePathTemp <- paste0(savePathTemp1, "CellAbundance/")
 if (!file.exists(savePathTemp)) {
     dir.create(savePathTemp, recursive = T)
 }
@@ -238,9 +274,16 @@ for (celltype in celltypes) {
     AbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), celltype = celltype, marker = SubName, savePath = savePathTemp, numGroup = 2)
 }
 
+#### Multiple cell subpopulations abudnace plot
+PlotTypes <- c("B", "CD8T", "Macro_CD11b", "Macro_CD163", "Macro_CD169", "Treg")
+p <- MultipleAbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), PlotTypes = PlotTypes, marker = SubName, numGroup = 2, style = "violin")
+pdf(paste0(savePathTemp1, "ViolinPlot of multiple celltypes in ", marker, " group.pdf"), height = 10, width = 8)
+print(p)
+dev.off()
+
 #### CNPs
 k_structures <- names(table(colData(sce)[, structure]))
-savePathTemp <- paste0(savePathTemp1, "/StructureAbundance/")
+savePathTemp <- paste0(savePathTemp1, "StructureAbundance/")
 if (!file.exists(savePathTemp)) {
     dir.create(savePathTemp, recursive = T)
 }

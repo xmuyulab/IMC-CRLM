@@ -12,7 +12,8 @@ library(grid)
 library(magick)
 library(ggpubr)
 library(ggprism)
-library(purrr)
+library(patchwork)
+source("./structural_analysis_functions.r")
 
 ### Make groupInfo file
 GetGroupInfo <- function(sce, clinical) {
@@ -291,7 +292,7 @@ LoadAnalysisResult <- function(IDs1, celltypes, sce) {
     return(array1)
 }
 
-TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE, Sig) {
+TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE, Sig = 0.05, returnMat = F) {
     numtypes <- length(celltypes)
     PvalueMat <- matrix(data = NA, nrow = numtypes, ncol = numtypes)
     rownames(PvalueMat) <- celltypes
@@ -326,12 +327,22 @@ TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE, Sig) {
         rownames(qvalueMat) <- rownames(PvalueMat)
         qvalueMat <- -log10(qvalueMat)
         FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
-
+        if (returnMat) {
+            list_ <- list()
+            list_[["qvalueMat"]] <- qvalueMat
+            list_[["FoldChangeMat"]] <- FoldChangeMat
+            return(list_)
+        }
         HeatmapForDiff(qvalueMat, MaskMat, FoldChangeMat, Sig = Sig, savepath)
     } else {
         PvalueMat <- -log10(PvalueMat)
         FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
-
+        if (returnMat) {
+            list_ <- list()
+            list_[["PvalueMat"]] <- PvalueMat
+            list_[["FoldChangeMat"]] <- FoldChangeMat
+            return(list_)
+        }
         HeatmapForDiff(PvalueMat, MaskMat, FoldChangeMat, Sig = Sig, savepath)
     }
 
@@ -436,6 +447,186 @@ getInteracDiff <- function(ResultPath, sce, GroupInfo = NULL, groups, celltypes,
     return(NULL)
 }
 
+## Invertion Barplot to visualize interaction difference
+InterDiffInvertBarplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol = NULL, groups = NULL, PlotTypes, savepath, IDs1 = NULL, IDs2 = NULL) {
+    if (is.null(IDs1)) {
+        IDs1 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[1], ])
+        IDs2 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[2], ])
+    }
+    celltypes <- names(table(sce$SubType))
+    array1 <- LoadAnalysisResult(IDs1, celltypes, sce)
+    array2 <- LoadAnalysisResult(IDs2, celltypes, sce)
+
+    list_ <- TestDiff(array1, array2, celltypes, savepath = savepath, returnMat = T)
+    qvalueMat <- list_[["qvalueMat"]]
+    FoldChangeMat <- list_[["FoldChangeMat"]]
+
+    if (!is.null(PlotTypes)) {
+        idx <- match(PlotTypes, rownames(qvalueMat))
+    } else {
+        idx <- match(celltypes, rownames(qvalueMat))
+    }
+
+    qvalueMat <- qvalueMat[idx, idx]
+    FoldChangeMat <- FoldChangeMat[idx, idx]
+
+    pairs <- rep(sapply(rownames(qvalueMat), function(x) {
+        paste0(x, "-", colnames(qvalueMat))
+    }))
+    qvalues <- as.numeric(qvalueMat)
+    foldchangevalues <- as.numeric(FoldChangeMat)
+    df <- as.data.frame(cbind(pairs, qvalues, foldchangevalues))
+    colnames(df) <- c("CelltypePair", "LgQValue", "Log2FoldChange")
+    df$LgQValue <- as.numeric(df$LgQValue)
+    df$Log2FoldChange <- as.numeric(df$Log2FoldChange)
+
+    # Rearrange the data frame based on Log2FoldChange
+    df <- df[order(df$Log2FoldChange), ]
+
+    # Reorder factor levels of CelltypePair
+    df$CelltypePair <- factor(df$CelltypePair, levels = df$CelltypePair)
+
+    ## omit the same sample
+    df <- df[seq.int(1, nrow(df), by = 2), ]
+
+    # Create a horizontal bar plot with LgQValue as the transparency of each bar
+    p <- ggplot(df, aes(x = CelltypePair, y = Log2FoldChange, fill = Log2FoldChange > 0, alpha = LgQValue)) +
+        geom_col() +
+        coord_flip() +
+        scale_fill_manual(values = c("steelblue", "darkorange"), labels = c("Negative", "Positive"), name = "Direction") +
+        scale_alpha_continuous(range = c(0.4, 1)) +
+        labs(x = "Cell Type Pair", y = "log2(Fold Change)", title = "Horizontal Bar Plot of Fold Changes") +
+        theme_minimal() +
+        theme(
+            plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+            axis.title = element_text(size = 12, face = "bold"),
+            axis.text = element_text(size = 10),
+            legend.title = element_text(size = 12, face = "bold"),
+            legend.text = element_text(size = 10),
+            legend.position = "bottom"
+        )
+
+    return(p)
+}
+
+## Invertion Barplot to visualize interaction difference
+InterAbundanceBarplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol = NULL, groups = NULL, groupsName, PlotTypes, savepath = NULL, IDs1 = NULL, IDs2 = NULL) {
+    if (is.null(IDs1)) {
+        IDs1 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[1], ])
+        IDs2 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[2], ])
+    }
+    celltypes <- names(table(sce$SubType))
+    ## Get interaction
+    array1 <- LoadAnalysisResult(IDs1, celltypes, sce)
+    array2 <- LoadAnalysisResult(IDs2, celltypes, sce)
+
+    list_ <- TestDiff(array1, array2, celltypes, savepath = savepath, returnMat = T)
+    qvalueMat <- list_[["qvalueMat"]]
+    FoldChangeMat <- list_[["FoldChangeMat"]]
+
+    ## Get abundance
+    sce1 <- sce[, sce$ID %in% IDs1]
+    sce2 <- sce[, sce$ID %in% IDs2]
+
+    abundanceMat1 <- GetAbundance(sce1, countcol = "SubType", is.fraction = T)
+    abundanceMat2 <- GetAbundance(sce2, countcol = "SubType", is.fraction = T)
+
+    if (is.null(PlotTypes)) {
+        PlotTypes <- celltypes
+    }
+
+    idx_ <- match(PlotTypes, colnames(abundanceMat1))
+    abundanceMat1 <- abundanceMat1[, idx_]
+    idx_ <- match(PlotTypes, colnames(abundanceMat2))
+    abundanceMat2 <- abundanceMat2[, idx_]
+
+    idx <- match(PlotTypes, rownames(qvalueMat))
+    qvalueMat <- qvalueMat[idx, idx]
+    FoldChangeMat <- FoldChangeMat[idx, idx]
+
+    pairs <- c()
+    cor_coef <- c()
+    cor_test <- c()
+
+    for (i in 1:nrow(qvalueMat)) {
+        for (j in 1:ncol(qvalueMat)) {
+            c1 <- rownames(qvalueMat)[i]
+            c2 <- colnames(qvalueMat)[j]
+            pairs <- c(pairs, paste0(c1, "-", c2))
+            sign_ <- ifelse(FoldChangeMat[i, j] > 0, T, F)
+            if (sign_) {
+                vTemp <- cbind(abundanceMat1[, c1], abundanceMat1[, c2])
+                coefTemp <- cor(vTemp[, 1], vTemp[, 2], method = "spearman")
+                testTemp <- cor.test(vTemp[, 1], vTemp[, 2], method = "spearman")$p.value
+                cor_coef <- c(cor_coef, coefTemp)
+                cor_test <- c(cor_test, testTemp)
+            } else {
+                vTemp <- cbind(abundanceMat2[, c1], abundanceMat2[, c2])
+                coefTemp <- cor(vTemp[, 1], vTemp[, 2], method = "spearman")
+                testTemp <- cor.test(vTemp[, 1], vTemp[, 2], method = "spearman")$p.value
+                cor_coef <- c(cor_coef, coefTemp)
+                cor_test <- c(cor_test, testTemp)
+            }
+        }
+    }
+
+    qvalues <- as.numeric(qvalueMat)
+    foldchangevalues <- as.numeric(FoldChangeMat)
+
+    df <- as.data.frame(cbind(pairs, qvalues, foldchangevalues, cor_coef, cor_test))
+    colnames(df) <- c("CelltypePair", "LgQValue", "Log2FoldChange", "Cor_coef", "Cor_test")
+    df$LgQValue <- as.numeric(df$LgQValue)
+    df$Log2FoldChange <- as.numeric(df$Log2FoldChange)
+    df$Cor_coef <- as.numeric(df$Cor_coef)
+    df$Cor_test <- as.numeric(df$Cor_test)
+    df$LgCor_test <- -log10(df$Cor_test + 0.0001)
+
+    # Rearrange the data frame based on Log2FoldChange
+    df <- df[order(df$Log2FoldChange), ]
+
+    # Reorder factor levels of CelltypePair
+    df$CelltypePair <- factor(df$CelltypePair, levels = df$CelltypePair)
+
+    ## omit the same sample
+    df <- df[seq.int(1, nrow(df), by = 2), ]
+
+    # Create a horizontal bar plot with LgQValue as the transparency of each bar
+    p1 <- ggplot(df, aes(x = CelltypePair, y = -abs(Log2FoldChange), fill = Log2FoldChange > 0, alpha = LgQValue)) +
+        geom_col() +
+        coord_flip() +
+        scale_fill_manual(values = c("steelblue", "darkorange"), labels = c(groupsName[2], groupsName[1]), name = "Fold Change") +
+        scale_alpha_continuous(range = c(0.4, 1), name = "Q Value") +
+        labs(x = "Cell Type Pair", y = NULL) +
+        theme_minimal() +
+        theme(
+            axis.text.x = element_text(size = 10),
+            axis.text.y = element_blank(),
+            legend.title = element_text(size = 10, face = "bold"),
+            legend.text = element_text(size = 8),
+            legend.position = "left"
+        )
+
+    # Create p2 with y-axis text
+    p2 <- ggplot(df, aes(x = CelltypePair, y = abs(Cor_coef), fill = Cor_coef > 0, alpha = LgCor_test)) +
+        geom_col() +
+        coord_flip() +
+        scale_fill_manual(values = c("steelblue", "darkorange"), labels = c("Negative", "Positive"), name = "Correlation") +
+        scale_alpha_continuous(range = c(0.4, 1), name = "Cor P-Value") +
+        labs(x = NULL, y = NULL) +
+        theme_minimal() +
+        theme(
+            axis.text = element_text(size = 10),
+            legend.title = element_text(size = 10, face = "bold"),
+            legend.text = element_text(size = 8),
+            legend.position = "right"
+        )
+
+    # Combine the plots using plot_grid
+    p <- plot_grid(p1, p2, ncol = 2, align = "hv", axis = "lrtb")
+
+    return(p)
+}
+
 ## Barplot to visualize certain interaction difference
 InterDiffBarplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol, groups, groupsName, celltypespair, savepath, IDs1 = NULL, IDs2 = NULL) {
     if (is.null(IDs1)) {
@@ -510,6 +701,65 @@ InterDiffBarplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol, groups
     dev.off()
 
     return(NULL)
+}
+
+## Interaction circle plot
+InterCircleplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol, groups, groupsName, PlotTypes, savepath, IDs1 = NULL, IDs2 = NULL) {
+    if (is.null(IDs1)) {
+        IDs1 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[1], ])
+        IDs2 <- rownames(GroupInfo[GroupInfo[, groupCol] == groups[2], ])
+    }
+    celltypes <- names(table(sce$SubType))
+    array1 <- LoadAnalysisResult(IDs1, celltypes, sce)
+    array2 <- LoadAnalysisResult(IDs2, celltypes, sce)
+
+    idx <- match(PlotTypes, rownames(array1))
+
+    array1_ <- matrix(data = NA, nrow = nrow(array1), ncol = ncol(array1))
+    array2_ <- array1_
+    for (i in 1:nrow(array1_)) {
+        for (j in 1:ncol(array1_)) {
+            array1_[i, j] <- mean(array1[i, j, ])
+        }
+    }
+    for (i in 1:nrow(array2_)) {
+        for (j in 1:ncol(array2_)) {
+            array2_[i, j] <- mean(array2[i, j, ])
+        }
+    }
+    rownames(array1_) <- rownames(array1)
+    colnames(array1_) <- colnames(array1)
+    rownames(array2_) <- rownames(array2)
+    colnames(array2_) <- colnames(array2)
+
+    array1_ <- array1_[idx, idx]
+    array2_ <- array2_[idx, idx]
+
+    cell_group <- c(rep(rep(colnames(array1_), each = nrow(array1_)), times = 2))
+    interacting_partner <- c(rep(rep(rownames(array1_), times = ncol(array1_)), times = 2))
+    interaction_strength <- c(as.numeric(array1_), as.numeric(array2_))
+    group <- c(rep(groupsName[1], length(array1_)), rep(groupsName[2], length(array2_)))
+
+    cell_data <- cbind(cell_group, interacting_partner, interaction_strength, group)
+    cell_data <- as.data.frame(cell_data)
+
+    # Filter out interactions with strength = 0
+    cell_data <- cell_data[cell_data$interaction_strength > 0, ]
+
+    # Create an igraph object
+    cell_network <- graph_from_data_frame(cell_data, directed = FALSE)
+
+    # Create a circular plot
+    p <- ggraph(cell_network, layout = "circle") +
+        geom_edge_link(aes(width = interaction_strength, alpha = interaction_strength), color = "steelblue") +
+        geom_node_point(size = 5, color = "darkorange") +
+        geom_node_text(aes(label = name), repel = TRUE, color = "black", size = 4) +
+        theme_void() +
+        theme(legend.position = "none") +
+        labs(title = "Cell-cell Interaction Circular Plot") +
+        facet_wrap(~group)
+
+    return(p)
 }
 
 ## cox test
