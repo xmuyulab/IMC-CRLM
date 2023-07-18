@@ -1,17 +1,29 @@
 # Functions for structural analysis
+library(SingleCellExperiment)
+library(parallel)
+
+library(survival)
+library(survminer)
+library(Hmisc)
+
 library(pheatmap)
 library(ggplot2)
 library(ggpubr)
-library(ggrepel)
-library(survival)
-library(survminer)
-library(Rtsne)
-library(RColorBrewer)
-library(SingleCellExperiment)
 library(ggbeeswarm)
-library(Hmisc)
+library(ggrepel)
 library(ggcor)
 library(ggsci)
+library(RColorBrewer)
+library(viridis)
+library(ggunchained)
+
+library(stats)
+library(Rtsne)
+library(FNN)
+library(igraph)
+
+library(dplyr)
+library(tidyr)
 
 ## clinical information
 load_clinical <- function(sce, clinicalFilePath) {
@@ -134,16 +146,16 @@ HeatmapForCelltypeInNeighbor <- function(sce, colname1, colname2, savePath) {
 }
 
 ## Comapre the Celluar pattern into groups
-CompareCellularPattern <- function(sce, sep, countcol, n_cluster, savePath) {
-    groups <- names(table(colData(sce)[, sep]))
+CompareCellularPattern <- function(sce_, sep, countcol, n_cluster, clinicalFeatures, savePath) {
+    groups <- names(table(colData(sce_)[, sep]))
     cat("The category is: ", groups, " in ", sep, "\n")
 
-    sce1 <- sce[, colData(sce)[, sep] == groups[1]]
-    sce2 <- sce[, colData(sce)[, sep] == groups[2]]
+    sce1 <- sce_[, colData(sce_)[, sep] == groups[1]]
+    sce2 <- sce_[, colData(sce_)[, sep] == groups[2]]
 
     ## ROI-level Boxplot
-    abundance1 <- GetAbundance(sceobj = sce1, countcol = countcol, is.reuturnMeans = F)
-    abundance2 <- GetAbundance(sceobj = sce2, countcol = countcol, is.reuturnMeans = F)
+    abundance1 <- GetAbundance(sceobj = sce1, countcol = countcol, clinicalFeatures = clinicalFeatures, is.reuturnMeans = F)
+    abundance2 <- GetAbundance(sceobj = sce2, countcol = countcol, clinicalFeatures = clinicalFeatures, is.reuturnMeans = F)
 
     BoxPlotForCellular(abundance1, abundance2, sep = sep, groups = groups, valueCol = c(1:n_cluster), savePath)
 
@@ -186,7 +198,7 @@ CNPFraction <- function(countDF, groupBy, xCol, savePath) {
 }
 
 ## get abundace
-GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans = FALSE) {
+GetAbundance <- function(sceobj, countcol, clinicalFeatures, is.fraction = TRUE, is.reuturnMeans = FALSE) {
     cellMeta <- colData(sceobj)
 
     ## ROI, major celltype and cell subtype names and other clinical information
@@ -222,10 +234,9 @@ GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans =
         strsplit(x, "_")[[1]][1]
     }))
 
-    CellCountMat$Tissue <- cellMeta[match(rownames(CellCountMat), cellMeta$ID), ]$Tissue
-    CellCountMat$RFS_status <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_status
-    CellCountMat$RFS_time <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$RFS_time
-    CellCountMat$KRAS_mutation <- cellMeta[match(CellCountMat$PID, cellMeta$PID), ]$KRAS_mutation
+    for (i in clinicalFeatures) {
+        CellCountMat[, i] <- cellMeta[match(rownames(CellCountMat), cellMeta$ID), ][, i]
+    }
 
     for (i in 1:ncol(CellCountMat)) {
         CellCountMat[, i][is.na(CellCountMat[, i])] <- 0
@@ -243,43 +254,20 @@ GetAbundance <- function(sceobj, countcol, is.fraction = TRUE, is.reuturnMeans =
 
         for (i in PIDs) {
             Temp <- subset(CellCountMat, PID == i)
-            expTemp <- Temp[, 1:(ncol(Temp) - 5)]
+            numMetaFeature <- length(clinicalFeatures) + 1
+            expTemp <- Temp[, 1:(ncol(Temp) - numMetaFeature)]
             MeanexpTemp <- apply(expTemp, MARGIN = 2, FUN = "mean")
-            CellCountMat2[i, 1:(ncol(Temp) - 5)] <- MeanexpTemp
-            CellCountMat2[i, (ncol(Temp) - 4):ncol(Temp)] <- Temp[1, (ncol(Temp) - 4):ncol(Temp)]
+            CellCountMat2[i, 1:(ncol(Temp) - numMetaFeature)] <- MeanexpTemp
+            CellCountMat2[i, (numMetaFeature + 1):ncol(Temp)] <- Temp[1, (numMetaFeature + 1):ncol(Temp)]
         }
         return(CellCountMat2)
     }
 }
 
-## Transform count matrix into ggplot plot matrix
-TransformIntoPlotMat <- function(mat, valueCol) {
-    exp <- mat[, valueCol]
-    meta <- mat[, (max(valueCol) + 1):ncol(mat)]
-
-    plotdf <- matrix(data = 0, nrow = nrow(exp) * ncol(exp), ncol = 5)
-    colnames(plotdf) <- c("Abundance", "Pattern", "ROI", "Relapse", "RelapseTime")
-    plotdf <- as.data.frame(plotdf)
-
-    AbundanceVec <- as.numeric(as.matrix(exp))
-    PatternVec <- rep(colnames(exp), each = nrow(exp))
-    ROIVec <- rep(rownames(exp), times = ncol(exp))
-    RelapsVec <- rep(meta$RFS_status, times = ncol(exp))
-    RelapsTimeVec <- rep(meta$RFS_time, times = ncol(exp))
-
-    plotdf$Abundance <- as.numeric(AbundanceVec)
-    plotdf$Pattern <- as.factor(PatternVec)
-    plotdf$ROI <- as.factor(ROIVec)
-    plotdf$Relapse <- as.factor(RelapsVec)
-    plotdf$RelapseTime <- as.numeric(RelapsTimeVec)
-
-    return(plotdf)
-}
-
 ## Boxplot For cellular pattern
 BoxPlotForCellular <- function(mat1, mat2, sep, groups, valueCol, savePath) {
-    plotdf1 <- TransformIntoPlotMat(mat1, valueCol)
-    plotdf2 <- TransformIntoPlotMat(mat2, valueCol)
+    plotdf1 <- pivot_longer(mat1, cols = valueCol, values_to = "Abundance", names_to = "Pattern")
+    plotdf2 <- pivot_longer(mat2, cols = valueCol, values_to = "Abundance", names_to = "Pattern")
 
     plotdf <- rbind(plotdf1, plotdf2)
     plotdf$Group <- c(rep(groups[1], nrow(plotdf1)), rep(groups[2], nrow(plotdf2)))
@@ -333,7 +321,7 @@ KMForCNP <- function(df, cluster, savePath) {
 }
 
 ## clutering via certain markers
-Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ReSubType = NULL, PatternCol, ncluster = 10, savePath) {
+Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ReSubType = NULL, PatternCol = NULL, ncluster = 10, savePath) {
     ## extract major types
     if (is.null(ReSubType)) {
         sce_ <- sce[, colData(sce)$MajorType %in% ReMajorType]
@@ -348,9 +336,11 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ReSubType = N
     exp <- t(exp) ## row should be sample
     set.seed(619)
     fit <- kmeans(exp, centers = ncluster, nstart = 50, iter.max = 100000)
-    table(fit$cluster)
 
-    colData(sce_)[, ReclusterName] <- fit$cluster
+    table(fit$cluster)
+    clusters <- fit$cluster
+
+    colData(sce_)[, ReclusterName] <- clusters
 
     ## T-sne visualization
     if (nrow(exp) <= 15000) {
@@ -393,8 +383,9 @@ Reclustering <- function(sce, markers, ReMajorType, ReclusterName, ReSubType = N
     PlotMarkerOnTSNE(exp_sample, tsne_coor, ReclusterName, paste0(savePath, "marker TSNE of ", ReclusterName, "/"))
 
     ## The relationship between re-clustering, origin cell subtype and Cellular pattern
-    SubtypeInReclustering(sce_, reclusteringCol = ReclusterName, OrigintypeCol = "SubType", PatternCol = PatternCol, savePath)
-
+    if (!is.null(PatternCol)) {
+        SubtypeInReclustering(sce_, reclusteringCol = ReclusterName, OrigintypeCol = "SubType", PatternCol = PatternCol, savePath)
+    }
     return(sce_)
 }
 
@@ -715,22 +706,25 @@ SurvivalForPhenoAssCell <- function(plotdf, savePath) {
 
 
 ## calcualte FC
-FCandPvalueCal <- function(mat, xCol, yCol, need.sample = FALSE) {
+FCandPvalueCal <- function(mat, xCol, yCol, set.groups = NULL, need.sample = FALSE, sample.size = 2000) {
+    set.seed(619)
     if (need.sample) {
-        if (nrow(mat) > 2000) {
-            idx <- sample(1:nrow(mat), size = 2000, replace = FALSE)
+        if (nrow(mat) > sample.size) {
+            idx <- sample(1:nrow(mat), size = sample.size, replace = FALSE)
             mat <- mat[idx, ]
         }
     }
-    groups <- names(table(mat[, yCol]))
-    groups <- as.character(sort(as.numeric(groups), decreasing = F))
+    if (is.null(set.groups)) {
+        groups <- names(table(mat[, yCol]))
+        groups <- as.character(sort(groups, decreasing = F))
+    }
+    cat("The Group in DEGs are", groups[2], "versus", groups[1], "\n")
     if (length(groups) < 2) {
         return(0)
     }
 
-    returnMat <- matrix(data = NA, nrow = length(xCol[1]:xCol[2]), ncol = 3)
+    returnMat <- matrix(data = NA, nrow = 0, ncol = 3)
     returnMat <- as.data.frame(returnMat)
-    colnames(returnMat) <- c("Celltype", "Foldchange", "P.value")
 
     group1mat <- mat[which(mat[, yCol] == groups[1]), ]
     group2mat <- mat[which(mat[, yCol] == groups[2]), ]
@@ -745,9 +739,10 @@ FCandPvalueCal <- function(mat, xCol, yCol, need.sample = FALSE) {
         foldchange <- mean(v2) / mean(v1)
         pvalue <- t.test(v2, v1)$p.value
 
-        returnMat[i, ] <- c(typeTemp, foldchange, pvalue)
+        returnMat <- rbind(returnMat, c(typeTemp, foldchange, pvalue))
     }
 
+    colnames(returnMat) <- c("Celltype", "Foldchange", "P.value")
     return(returnMat)
 }
 
@@ -820,18 +815,18 @@ VolcanoPlot <- function(df, pthreshold = 0.05, fcthreshold = 1.4, feature, filen
                 plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")
             )
     }
-    ggsave(p.vol, filename = filename)
+    ggsave(p.vol, filename = filename, width = 7, height = 7)
 
     return(NULL)
 }
 
 ## Assign new label
-AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType, cutoffType, cutoffValue = 10, numGroup = 2, is.reuturnsce = FALSE) {
+AssignNewlabel <- function(sce_, allROIs, phenoLabel, ReclusterName, interstType, clinicalFeatures, cutoffType, cutoffValue = 10, numGroup = 2, is.reuturnsce = FALSE) {
     colData(sce_)[, phenoLabel] <- "Pheno_neg"
     colData(sce_)[, phenoLabel][which(colData(sce_)[, ReclusterName] %in% interstType)] <- "Pheno_pos"
 
     if (!is.reuturnsce) {
-        CountMat <- GetAbundance(sce_, countcol = phenoLabel, is.fraction = FALSE, is.reuturnMeans = FALSE)
+        CountMat <- GetAbundance(sce_, countcol = phenoLabel, clinicalFeatures = clinicalFeatures, is.fraction = FALSE, is.reuturnMeans = FALSE)
         if (cutoffType == "median") {
             Cutoff <- median(CountMat[, "Pheno_pos"])
             cat("The median cutoff is ", Cutoff, "\n")
@@ -901,6 +896,7 @@ getResult <- function(ResultPath, ROIs, celltypes, p_threshold = 0.05) {
         colname_ <- sapply(colname_, function(x) {
             gsub(pattern = "\\.", replacement = " ", x)
         })
+        colname_ <- unname(colname_)
         rowname_ <- colname_
 
         for (i in 1:nrow(csvTemp)) {
@@ -1149,14 +1145,14 @@ MultipleAbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, AbundanceDF3,
         Counts1 <- AbundanceDF1[, PlotTypes]
         Counts2 <- AbundanceDF2[, PlotTypes]
 
-        ROIsVec <- c(rep(rownames(Counts1),times=ncol(Counts1)) , rep(rownames(Counts2),times=ncol(Counts2)))
+        ROIsVec <- c(rep(rownames(Counts1), times = ncol(Counts1)), rep(rownames(Counts2), times = ncol(Counts2)))
         CountsVec <- c(as.numeric(as.matrix(Counts1)), as.numeric(as.matrix(Counts2)))
-        CelltypeVec <- c(rep(colnames(Counts1),each=nrow(Counts1)),rep(colnames(Counts2),each=nrow(Counts2)))
+        CelltypeVec <- c(rep(colnames(Counts1), each = nrow(Counts1)), rep(colnames(Counts2), each = nrow(Counts2)))
         GroupsVec <- c(rep(groupsName[1], length(as.matrix(Counts1))), rep(groupsName[2], length(as.matrix(Counts2))))
 
-        plotdf <- cbind(ROIsVec, CountsVec, CelltypeVec,GroupsVec)
+        plotdf <- cbind(ROIsVec, CountsVec, CelltypeVec, GroupsVec)
         plotdf <- as.data.frame(plotdf)
-        colnames(plotdf) <- c("ROI", "Count", "Celltype","Group")
+        colnames(plotdf) <- c("ROI", "Count", "Celltype", "Group")
 
         plotdf$Count <- as.numeric(plotdf$Count)
 
@@ -1169,37 +1165,37 @@ MultipleAbundanceSwarmPlot <- function(AbundanceDF1, AbundanceDF2, AbundanceDF3,
         if (style == "box") {
             p <- p + geom_boxplot(show.legend = FALSE, outlier.shape = NA, alpha = 0.8)
         }
-  p <- p +
-  geom_jitter(width = 0.15, size = 2, alpha = 0.6) +
-  theme_bw() +
-  labs(x = NULL, y = "Count", title = "Box Plot of Counts by Group and Cell Type") +
-  scale_color_manual(values = color) +
-  scale_fill_manual(values = color) +
-  stat_compare_means(
-    aes(group = Group),
-    comparisons = list(c(groupsName[1], groupsName[2])),
-    method = "t.test",
-    label = "p.signif",
-    label.y = max(plotdf$Count) * 0.95,
-    size = 4
-  ) +
-  facet_wrap(~Celltype,nrow=2) +
-  theme(
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text = element_text(size = 10),
-    strip.text = element_text(size = 12, face = "bold"),
-    strip.background = element_blank(),
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
-    panel.grid.major = element_line(color = "gray", size = 0.5),
-    panel.grid.minor = element_blank()
-  )
+        p <- p +
+            geom_jitter(width = 0.15, size = 2, alpha = 0.6) +
+            theme_bw() +
+            labs(x = NULL, y = "Count", title = "Box Plot of Counts by Group and Cell Type") +
+            scale_color_manual(values = color) +
+            scale_fill_manual(values = color) +
+            stat_compare_means(
+                aes(group = Group),
+                comparisons = list(c(groupsName[1], groupsName[2])),
+                method = "t.test",
+                label = "p.signif",
+                label.y = max(plotdf$Count) * 0.95,
+                size = 4
+            ) +
+            facet_wrap(~Celltype, nrow = 1) +
+            theme(
+                plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+                axis.title = element_text(size = 12, face = "bold"),
+                axis.text = element_text(size = 10),
+                strip.text = element_text(size = 12, face = "bold"),
+                strip.background = element_blank(),
+                panel.border = element_rect(color = "black", fill = NA, size = 1),
+                panel.grid.major = element_line(color = "gray", size = 0.5),
+                panel.grid.minor = element_blank()
+            )
     }
     return(p)
 }
 
 ## Survival analysis for Phenotype associated label
-SurvivalForPhenoAssoLabel <- function(AbundanceDF, GroupCol, time, status, marker, cutoffType = "best", savePath) {
+SurvivalForPhenoAssoLabel <- function(AbundanceDF, GroupCol, time, status, marker, cutoffType = "best", manual = NULL, savePath) {
     AbundanceDF <- AbundanceDF[, c(GroupCol, time, status)]
 
     if (cutoffType == "best") {
@@ -1211,6 +1207,9 @@ SurvivalForPhenoAssoLabel <- function(AbundanceDF, GroupCol, time, status, marke
     }
     if (cutoffType == "median") {
         cutpoint <- median(AbundanceDF[, GroupCol])
+    }
+    if (cutoffType == "manual") {
+        cutpoint <- manual
     }
 
     GroupVec <- ifelse(AbundanceDF[, GroupCol] >= cutpoint, "High Abundance", "Low Abundance")
@@ -1331,9 +1330,8 @@ BarplotForInteraction <- function(ResultPath, celltype1, celltype2, ROIs1, ROIs2
 }
 
 ## Calculate celltypes difference in different clinical groups
-HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, savePath) {
-    celltypes <- names(table(sce$SubType))
-    celltypes <- celltypes[1:(length(celltypes) - 1)]
+HeatmapForMarkersInGroups <- function(sce, markers, groupCol, typesCol = "SubType", adjust.p = T, FCthreshold = 1.5, savePath, return.mat = FALSE, sample.size = 2000) {
+    celltypes <- names(table(colData(sce)[, typesCol]))
 
     MarkerVec <- c()
     TypeVec <- c()
@@ -1342,10 +1340,10 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, save
 
     i <- 1
     for (interstSubType in celltypes) {
-        sce_ <- sce[, sce$SubType %in% interstSubType]
+        sce_ <- sce[, colData(sce)[, typesCol] %in% interstSubType]
         mat <- as.data.frame(t(assay(sce_)[markers, ]))
         mat$classLabel <- colData(sce_)[, groupCol]
-        FCDF <- FCandPvalueCal(mat, xCol = c(1, length(markers)), yCol = (length(markers) + 1), need.sample = TRUE)
+        FCDF <- FCandPvalueCal(mat, xCol = c(1, length(markers)), yCol = (length(markers) + 1), need.sample = TRUE, sample.size = sample.size)
 
         FCVec <- c(FCVec, as.numeric(FCDF[, 2]))
         PVec <- c(PVec, as.numeric(FCDF[, 3]))
@@ -1359,22 +1357,33 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, save
     plotdf <- as.data.frame(plotdf)
     plotdf[, 1] <- MarkerVec
     plotdf[, 2] <- TypeVec
+    plotdf[, 3] <- PVec
     plotdf[, 4] <- ifelse(FCVec != 0, log2(FCVec), 0)
+    plotdf[, 4] <- ifelse(abs(plotdf[, 4]) >= log2(FCthreshold), plotdf[, 4], 0)
 
-    colnames(plotdf) <- c("Marker", "Subtype", "Pvalue", "FoldChange")
+    colnames(plotdf) <- c("Marker", "Subtype", "Pvalue", "log2FoldChange")
 
     if (adjust.p) {
         plotdf$Qvalue <- p.adjust(PVec, method = "BH")
         plotdf$Qlabel <- cut(plotdf$Qvalue, breaks = c(0, 0.001, 0.01, 0.05, 1), labels = c(8, 6, 4, 2))
         plotdf$Qlabel <- as.factor(as.numeric(as.character(plotdf$Qlabel)))
+
+        p <- ggplot(data = plotdf, aes(x = Subtype, y = Marker)) +
+            geom_point(aes(size = Qlabel, fill = log2FoldChange), shape = 22, color = "grey80")
     } else {
         plotdf$Plabel <- cut(plotdf$Pvalue, breaks = c(0, 0.001, 0.01, 0.05, 1), labels = c(8, 6, 4, 2))
         plotdf$Plabel <- as.factor(plotdf$Plabel)
         plotdf$Plabel <- as.factor(as.numeric(as.character(plotdf$Plabel)))
+
+        p <- ggplot(data = plotdf, aes(x = Subtype, y = Marker)) +
+            geom_point(aes(size = Plabel, fill = log2FoldChange), shape = 22, color = "grey80")
     }
 
-    p <- ggplot(data = plotdf, aes(x = Subtype, y = Marker)) +
-        geom_point(aes(size = Qlabel, fill = FoldChange), shape = 22, color = "grey80") +
+    if (return.mat) {
+        return(plotdf)
+    }
+
+    p <- p +
         scale_fill_gradient2(low = "#445393", high = "#EE2627", mid = "white") +
         theme_bw() +
         theme(
@@ -1388,9 +1397,485 @@ HeatmapForMarkersInGroups <- function(sce, markers, groupCol, adjust.p = T, save
         ) +
         labs(x = "", y = NULL) +
         scale_size_discrete(range = c(2, 8))
+
     pdf(paste0(savePath, "alltypes differential markers in relapse.pdf"), width = 8, height = 6)
     print(p)
     dev.off()
 
     return(NULL)
+}
+
+## Get Differential expression genes in certain groups
+GetDEGinGroup <- function(sce_, groupCol, groupLevel, cellType, markers) {
+    groupName <- names(table(colData(sce_)[, groupCol]))
+    cat("The clinical group ", groupCol, " is ", groupName, "\n")
+    idx <- names(table(colData(sce_)[, groupLevel]))
+
+    df <- matrix(data = 0, nrow = (length(idx) * length(cellType)), ncol = (length(groupCol) + length(markers) + 2))
+    df <- as.data.frame(df)
+
+    z <- 1
+
+    for (i in 1:length(idx)) {
+        idTemp <- idx[i]
+        sce_Temp <- sce_[, colData(sce_)[, groupLevel] == idTemp]
+        for (j in 1:length(cellType)) {
+            cellTemp <- cellType[j]
+            sce_Temp2 <- sce_Temp[, colData(sce_Temp)$SubType == cellTemp]
+            expTemp <- assay(sce_Temp2)
+            expTemp <- apply(expTemp, MARGIN = 1, FUN = "mean")
+            expTemp <- expTemp[markers]
+            df[z, ] <- c(expTemp, colData(sce_Temp)[1, groupCol], idTemp, cellTemp)
+            z <- z + 1
+        }
+    }
+    colnames(df) <- c(markers, groupCol, "ID", "Subtype")
+
+    dfLong <- pivot_longer(df, cols = -c(RFS_status, ID, Subtype), names_to = "Marker", values_to = "Intensity")
+    dfLong$Intensity <- as.numeric(dfLong$Intensity)
+
+    FCList <- list()
+    for (celltypeTemp in cellType) {
+        dfLongTemp <- subset(dfLong, Subtype == celltypeTemp)
+        FCList[[celltypeTemp]] <- CalFC(dfLongTemp, groupCol = groupCol, groupName, nameCol = "Marker", valueCol = "Intensity")
+        FCList[[celltypeTemp]]$Subtype <- rep(celltypeTemp, nrow(FCList[[celltypeTemp]]))
+    }
+
+    plotdf <- as.data.frame(FCList[[1]])
+    for (i in 2:length(FCList)) {
+        plotdf <- rbind(plotdf, FCList[[i]])
+    }
+
+    return(plotdf)
+}
+
+CalFC <- function(df_, groupCol, groupName, nameCol, valueCol, eps = 1e-8) {
+    calName <- names(table(df_[, nameCol]))
+
+    resultDF <- as.data.frame(matrix(data = 0, nrow = length(calName), ncol = 2))
+    rownames(resultDF) <- calName
+
+    for (i in 1:length(calName)) {
+        markerTemp <- calName[i]
+        v1 <- as.numeric(as.matrix(df_[subset(df_[, nameCol] == markerTemp & df_[, groupCol] == groupName[1]), valueCol]))
+        v2 <- as.numeric(as.matrix(df_[subset(df_[, nameCol] == markerTemp & df_[, groupCol] == groupName[2]), valueCol]))
+
+        FC <- (mean(v2) + eps) / (mean(v1) + eps)
+        P <- t.test(v2, v1)$p.value
+        resultDF[i, ] <- c(FC, P)
+    }
+    colnames(resultDF) <- c("FC", "Pvalue")
+    resultDF$log2FC <- log2(resultDF$FC)
+    resultDF$lgPvalue <- -log10(resultDF$Pvalue + eps)
+    resultDF$Qvalue <- p.adjust(resultDF$Pvalue, "BH")
+    resultDF$lgQvalue <- -log10(resultDF$Qvalue + eps)
+    resultDF$Marker <- rownames(resultDF)
+
+    return(resultDF)
+}
+
+## Calcualte the x and y from a position vector
+GetXandY <- function(posVec) {
+    xVec <- c()
+    yVec <- c()
+
+    spliteRes <- sapply(posVec, function(x) {
+        return(strsplit(x, split = ",")[[1]])
+    })
+
+    for (i in seq(1, length(spliteRes), 2)) {
+        xTemp <- strsplit(spliteRes[i], "\\(")[[1]][2]
+        yTemp <- strsplit(spliteRes[i + 1], ")")[[1]][1]
+
+        xVec <- c(xVec, as.numeric(xTemp))
+        yVec <- c(yVec, as.numeric(yTemp))
+    }
+
+    cor <- as.data.frame(matrix(data = NA, ncol = 2, nrow = length(xVec)))
+    cor[, 1] <- xVec
+    cor[, 2] <- yVec
+
+    colnames(cor) <- c("cor_x", "cor_y")
+    return(cor)
+}
+
+## Dimention Reduction for building graph
+DimenRec <- function(sce_, GroupFeature, markers, do.pca = FALSE, pca.dimen = 10, explaine.pca = FALSE, embeeding.method = "tsne", num.threads = 1) {
+    m <- t(assay(sce_))
+    m <- m[, match(markers, colnames(m))]
+    label <- colData(sce_)[, GroupFeature]
+
+    if (do.pca) {
+        # Apply PCA
+        pca_result <- prcomp(m, scale. = TRUE)
+
+        # Print summary of the PCA result
+        print(summary(pca_result))
+
+        # If you want to use the transformed data (for example, using the first two principal components), you can access it like this:
+        m <- pca_result$x[, 1:pca.dimen]
+
+        # If you want to see the proportion of variance explained by each principal component, you can view it like this:
+        if (explaine.pca) {
+            explained_variance <- pca_result$sdev^2
+            explained_variance_ratio <- explained_variance / sum(explained_variance)
+
+            print(explained_variance_ratio)
+        }
+    }
+
+    if (embeeding.method == "tsne") {
+        # Apply t-SNE
+        tsne_result <- Rtsne(m, dims = 2, perplexity = 30, check_duplicates = FALSE, num_threads = num.threads)
+
+        # If you want to use the transformed data (for example, using the first two t-SNE dimensions), you can access it like this:
+        m <- tsne_result$Y
+    }
+
+    m <- as.data.frame(m)
+    colnames(m) <- c("cor_x", "cor_y")
+    m$label <- label
+
+    return(m)
+}
+
+## Build KNN graph and calculate the neighbors entropy and fraction
+KGandFracEntro <- function(m, cordim = 2, k = 10, central.weight = NULL, multi.cores = 8) {
+    classes <- m$label
+    m <- m[, 1:cordim]
+
+    LabelGroup <- sort(names(table(classes)), decreasing = T)
+    cat("The labels are ", LabelGroup, "\n")
+    cat("Build KNN Graph", "\n")
+
+    # Find the k-nearest neighbors
+    knn_result <- get.knn(m, k = k)
+
+    cat("Calculate Entropy and Fraction in Neighbors", "\n")
+    # Calculate the entropy and fractions for each vertex, using parallel computation
+    results <- mclapply(1:nrow(m), function(i) {
+        # Get the classes of the k-nearest neighbors and the vertex itself
+        neighbor_classes <- c(rep(classes[i], central.weight), classes[knn_result$nn.index[i, ]])
+        df <- as.data.frame(table(factor(neighbor_classes, levels = LabelGroup)))
+        # Calculate the entropy, handle the case of single-class event
+        entropy_val <- CalEntropy(df)
+
+        # Calculate the fractions of neighbors that belong to each class
+        fractions <- CalFraction(df)
+
+        # Return the entropy and fraction of neighbors
+        c(entropy_val, fractions)
+    }, mc.cores = multi.cores)
+
+    # Convert the results to a matrix
+    results_matrix <- do.call(rbind, results)
+    colnames(results_matrix) <- c("Entropy", "Fraction_class_1")
+    return(results_matrix)
+}
+
+## Calculate entropy
+CalEntropy <- function(df) {
+    if (0 %in% df[, 2]) {
+        value <- 0
+    } else {
+        allcount <- sum(df[, 2])
+        p_x <- df[, 2] / allcount
+        logp_x <- log2(p_x)
+        value <- p_x[1] * logp_x[1] + p_x[2] * logp_x[2]
+        value <- (-1) * value
+    }
+    return(value)
+}
+
+## Calculate Fraction
+CalFraction <- function(df) {
+    allcount <- sum(df[, 2])
+    value <- round(df[1, 2] / allcount, 6)
+
+    return(value)
+}
+
+## Generate null distribution
+GeneNullDistri <- function(m, cordim, sample.size = 20, perm.times = 1000, seed = 619) {
+    classes <- m$label
+    m <- m[, 1:cordim]
+    LabelGroup <- sort(names(table(classes)), decreasing = T)
+
+    cat("Generate Null Distribution in size", sample.size, "for times", perm.times, "\n")
+
+    set.seed(seed)
+    len_class <- length(classes)
+
+    fraction_NullDistribution <- c()
+
+    for (i in 1:perm.times) {
+        randidx <- sample.int(len_class, size = sample.size, replace = FALSE)
+        randneighbor_classes <- classes[randidx]
+
+        df <- as.data.frame(table(factor(randneighbor_classes, levels = LabelGroup)))
+        # Calculate the fractions of neighbors that belong to each class
+        fractions <- CalFraction(df)
+        fraction_NullDistribution <- c(fraction_NullDistribution, fractions)
+    }
+
+    return(sort(fraction_NullDistribution))
+}
+
+## Plot the points label and entropy
+PlotClassLabel <- function(sce_, Classlabels, Entropylabels, markers, sample.size = 1e4, num.threads = 1, SavePath1 = NULL, SavePath2 = NULL, SavePath3 = NULL, seed = 619) {
+    ## Data prepare
+    exp <- t(assay(sce_))
+    exp <- exp[, match(markers, colnames(exp))]
+
+    set.seed(seed)
+    ## sample
+    if (!is.null(sample.size)) {
+        idx <- sample.int(length(Classlabels), size = sample.size)
+    } else {
+        idx <- 1:(length(Classlabels))
+    }
+
+    exp <- exp[idx, ]
+    Classlabels <- Classlabels[idx]
+    Entropylabels <- Entropylabels[idx]
+    PIDlabels <- sce_$PID[idx]
+
+    ## T-SNE
+    tsne_result <- Rtsne(exp, dims = 2, perplexity = 30, check_duplicates = FALSE, num_threads = num.threads)
+    coor <- tsne_result$Y
+
+    Classlabels <- factor(Classlabels, levels = c("Background", "Pheno_pos", "Pheno_neg"))
+
+    ## Class
+    plotdf <- as.data.frame(matrix(data = NA, nrow = length(Classlabels), ncol = 3))
+    colnames(plotdf) <- c("x", "y", "Identity")
+    plotdf["x"] <- coor[, 1]
+    plotdf["y"] <- coor[, 2]
+    plotdf["Identity"] <- Classlabels
+
+    myPalette <- c("grey", pal_nejm("default")(2))
+    myPalette <- alpha(myPalette, ifelse(myPalette == "grey", 0.5, 1))
+
+    p <- ggplot(plotdf, aes(x = x, y = y, color = Identity)) +
+        geom_point(size = 1) +
+        scale_colour_manual(values = myPalette) +
+        theme_test()
+
+    pdf(SavePath1, height = 6, width = 8)
+    print(p)
+    dev.off()
+
+    ## Entropy
+    plotdf <- as.data.frame(matrix(data = NA, nrow = length(Entropylabels), ncol = 3))
+    colnames(plotdf) <- c("x", "y", "Identity")
+    plotdf["x"] <- coor[, 1]
+    plotdf["y"] <- coor[, 2]
+    plotdf["Identity"] <- Entropylabels
+
+    p <- ggplot(plotdf, aes(x = x, y = y, color = Identity)) +
+        geom_point(size = 1) +
+        scale_colour_viridis(option = "magma") +
+        theme_test()
+
+    pdf(SavePath2, height = 6, width = 8)
+    print(p)
+    dev.off()
+
+    ## Markers
+    if (!dir.exists(paste0(SavePath3, "marker TSNE of Treg/"))) {
+        dir.create(paste0(SavePath3, "marker TSNE of Treg/"))
+    }
+
+    for (marker in markers) {
+        plotdfTemp <- cbind(coor, exp[, marker])
+        colnames(plotdfTemp) <- c("tSNE1", "tSNE2", "Intensity")
+        plotdfTemp[, "Intensity"] <- as.numeric(plotdfTemp[, "Intensity"])
+        plotdfTemp <- as.data.frame(plotdfTemp)
+
+        p <- ggplot(plotdfTemp, aes(tSNE1, tSNE2)) +
+            geom_point(aes(color = Intensity), size = 0.5) +
+            scale_colour_gradient(low = "grey", high = "#EE0000") +
+            theme_classic()
+
+        pdf(paste0(SavePath3, "marker TSNE of Treg/", marker, " expression on tSNE reclustering.pdf"), height = 3, width = 4)
+        print(p)
+        dev.off()
+    }
+
+    ## Patient level Tsne
+    plotdf <- as.data.frame(matrix(data = NA, nrow = length(PIDlabels), ncol = 3))
+    colnames(plotdf) <- c("x", "y", "Identity")
+    plotdf["x"] <- coor[, 1]
+    plotdf["y"] <- coor[, 2]
+    plotdf["Identity"] <- as.factor(PIDlabels)
+
+    p <- ggplot(plotdf, aes(x = x, y = y, color = Identity)) +
+        geom_point(size = 1) +
+        scale_colour_manual(values = pal_igv("default")(51)) +
+        theme_test()
+
+    pdf(paste0(SavePath3, "T-SNE of phenotype associated label on PID.pdf"), height = 6, width = 8)
+    print(p)
+    dev.off()
+
+    return(NULL)
+}
+
+## Calcualte the K-nn of certain cell subpopulation via spatstat
+CalKNNBySpatstat <- function(sce, ROIs, CenType, NeighType = "SubType", k = 10, xlim = c(0, 1000), ylim = c(0, 1000), return.cellID = FALSE) {
+    # Record the 10-nn cells of TC
+    k_NeighborsList <- list()
+
+    for (ROI in ROIs) {
+        sce_ <- sce[, sce$ID == ROI]
+
+        coor <- sce_$Position
+        coor_df <- GetXandY(coor)
+        coor_df$SubType <- colData(sce_)[, NeighType]
+
+        # head(coor_df)
+        TargetTypeidx <- (colData(sce_)[, NeighType] == CenType)
+        if (length(TargetTypeidx) == 0) {
+            next
+        }
+
+        # Convert your data frame to a ppp object
+        points_ppp <- ppp(coor_df$cor_x, coor_df$cor_y, xrange = xlim, yrange = ylim, marks = coor_df$SubType)
+
+        # Find nearest neighbors
+        nn <- nncross(points_ppp, points_ppp, k = 2:(k + 1))
+
+        k_neighbors <- nn[, (k + 1):ncol(nn)]
+        k_neighbors <- apply(k_neighbors, MARGIN = 2, function(x) {
+            x <- as.numeric(x)
+            return(sce_$CellID[x])
+        })
+
+        k_neighbors_ <- k_neighbors[TargetTypeidx, ]
+
+        k_NeighborsList[[ROI]] <- as.numeric(k_neighbors_)
+    }
+
+    for (i in length(k_NeighborsList):1) {
+        if (length(k_NeighborsList[[i]]) == 0) {
+            k_NeighborsList[[i]] <- NULL
+        }
+    }
+
+    if (return.cellID) {
+        return(k_NeighborsList)
+    }
+
+    Subtypes <- names(table(colData(sce)[, NeighType]))
+    InterDF <- as.data.frame(matrix(data = NA, nrow = length(k_NeighborsList), ncol = length(Subtypes)))
+    colnames(InterDF) <- Subtypes
+
+    for (i in 1:length(k_NeighborsList)) {
+        CellIDTemp <- k_NeighborsList[[i]]
+        CelltypeTemp <- colData(sce)[, NeighType][match(CellIDTemp, sce$CellID)]
+        CelltypeTemp <- factor(CelltypeTemp, levels = Subtypes)
+        CelltypeTemp <- as.data.frame(table(CelltypeTemp))
+        InterDF[i, ] <- CelltypeTemp[, 2] / (length(k_NeighborsList[[i]]) / k)
+    }
+
+    rownames(InterDF) <- names(k_NeighborsList)
+    InterDF$PID <- sapply(rownames(InterDF), function(x) {
+        return(strsplit(x, "_")[[1]][1])
+    })
+    InterDF$RFS_status <- sce$RFS_status[match(InterDF$PID, sce$PID)]
+    InterDF$RFS_time <- sce$RFS_time[match(InterDF$PID, sce$PID)]
+
+    return(InterDF)
+}
+
+## Calcualte the neighors within d of certain cell subpopulation via spatstat
+CalDNNBySpatstat <- function(sce, ROIs, CenType, NeighType = "SubType", d = 10, xlim = c(0, 1000), ylim = c(0, 1000)) {
+    celltypes <- names(table(colData(sce)[, NeighType]))
+
+    k_NeighborsList <- list()
+
+    for (ROI in ROIs) {
+        sce_ <- sce[, sce$ID == ROI]
+
+        coor <- sce_$Position
+        coor_df <- GetXandY(coor)
+        coor_df$SubType <- colData(sce_)[, NeighType]
+
+        # head(coor_df)
+        TargetTypeidx <- (colData(sce_)[, NeighType] == CenType)
+        if (nrow(coor_df[TargetTypeidx, ]) == 0) {
+            next
+        }
+
+        # Convert your data frame to a ppp object
+        points_ppp <- ppp(coor_df$cor_x, coor_df$cor_y, xrange = xlim, yrange = ylim, marks = coor_df$SubType)
+
+        # Find nearest neighbors
+        nn <- nncross(points_ppp, points_ppp, k = 2:21)
+
+        k_neighborsDist <- nn[, 1:20]
+        k_neighborsID <- nn[, 21:ncol(nn)]
+
+        k_neighborsDist <- k_neighborsDist[TargetTypeidx, ]
+        k_neighborsID <- k_neighborsID[TargetTypeidx, ]
+
+        k_NeighborsDF <- as.data.frame(matrix(data = 0, nrow = nrow(k_neighborsID), ncol = length(celltypes)))
+        colnames(k_NeighborsDF) <- celltypes
+
+        for (i in 1:nrow(k_neighborsDist)) {
+            idxTemp <- unname((k_neighborsDist[i, ] <= d))
+            x <- unname(k_neighborsID[i, idxTemp])
+            if (length(x) == 0) {
+                next
+            } else {
+                dfTemp <- as.data.frame(table(colData(sce_)[as.numeric(x), NeighType]))
+                k_NeighborsDF[i, match(dfTemp[, 1], colnames(k_NeighborsDF))] <- as.numeric(dfTemp[, 2])
+            }
+        }
+        k_NeighborsDF$ID <- rep(ROI, nrow(k_NeighborsDF))
+        rownames(k_NeighborsDF) <- sce_$CellID[TargetTypeidx]
+
+        k_NeighborsList[[ROI]] <- k_NeighborsDF
+    }
+
+    return(k_NeighborsList)
+}
+
+## Specific cell neighbors' subpopulation DEGs analysis
+SpeciNeiDEGAnalysis <- function(sce, IDcol, analysisType, metaMarkers, sample.size = 2000) {
+    ReturnDF <- as.data.frame(matrix(data = NA, nrow = 0, ncol = 4))
+
+    for (cellType in analysisType) {
+        sceType <- sce[, colData(sce)[, "SubType"] == cellType]
+
+        IDx <- colData(sceType)[, IDcol]
+
+        Assosce <- sceType[, IDx]
+        NoAssosce <- sceType[, !IDx]
+
+        Assoexp <- t(assay(Assosce))
+        NoAssoexp <- t(assay(NoAssosce))
+
+        set.seed(1)
+
+        if (!is.null(sample.size)) {
+            sample.idx <- sample.int(nrow(NoAssoexp), size = sample.size)
+            NoAssoexp <- NoAssoexp[sample.idx, ]
+        }
+
+        Exp <- rbind(Assoexp, NoAssoexp)
+        Exp <- as.data.frame(Exp)
+
+        Exp <- Exp[, match(metaMarkers, colnames(Exp))]
+
+        Exp$label <- c(rep(1, nrow(Assoexp)), rep(0, nrow(NoAssoexp)))
+
+        mat_foldchangeMat <- FCandPvalueCal(mat = Exp, xCol = c(1, length(metaMarkers)), yCol = (length(metaMarkers) + 1), need.sample = FALSE)
+        mat_foldchangeMat$Q.value <- p.adjust(mat_foldchangeMat$P.value, method = "BH")
+        mat_foldchangeMat <- cbind("NeigborType" = rep(cellType, nrow(mat_foldchangeMat)), mat_foldchangeMat)
+
+        ReturnDF <- rbind(ReturnDF, mat_foldchangeMat)
+    }
+
+    return(ReturnDF)
 }

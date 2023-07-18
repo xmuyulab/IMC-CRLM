@@ -1,15 +1,19 @@
 # clustering
-library(RColorBrewer)
+
+library(SingleCellExperiment)
+
+library(dplyr)
+library(stringr)
+library(reshape2)
+
 library(pheatmap)
 library(ComplexHeatmap)
 library(ggplot2)
-library(cowplot)
-library(ggrepel)
-library(dplyr)
 library(ggpubr)
-library(stringr)
-library(reshape2)
-library(SingleCellExperiment)
+library(ggrepel)
+library(cowplot)
+library(RColorBrewer)
+library(ggsci)
 
 source("/home/lyx/project/IMC/clustering_functions.r")
 source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
@@ -524,3 +528,69 @@ markersList <- c(
 MarkerHeatmap(bestnorm_exp, markersList, savePath)
 saveRDS(bestnorm_exp, paste0(savePath, "annotate_allcells.rds"))
 write.csv(bestnorm_exp, file = paste0(savePath, "annotate_allcells.csv"), row.names = FALSE)
+
+## T-SNE
+library(Rtsne)
+
+### Load data
+bestnorm <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
+table(bestnorm$SubType)
+
+bestnorm_exp <- assay(bestnorm)
+dim(bestnorm_exp)
+
+annoMarkers <- c(MarkerList[[2]], MarkerList[[3]], MarkerList[[4]], MarkerList[[5]], MarkerList[[6]])
+annoMarkers <- unique(annoMarkers)
+
+### Sampling
+sample.size = 15000
+set.seed(619)
+sampleidx <- sample.int(n = ncol(bestnorm_exp), size = sample.size)
+
+bestnorm_sampleexp <- bestnorm_exp[match(annoMarkers, rownames(bestnorm_exp)), sampleidx]
+dim(bestnorm_sampleexp)
+
+oridf <- t(bestnorm_sampleexp)
+colnames(oridf)
+
+### T-sne
+tsnedf <- Rtsne(oridf, dims = 2, perplexity = 50, check_duplicates = FALSE, max_iter = 10000)
+df <- tsnedf$Y
+df <- as.data.frame(df)
+colnames(df) <- c("TSNE1", "TSNE2")
+
+### Visualization
+# Assume "Group" is the categorical column in df
+df$Group <- bestnorm$SubType[sampleidx]
+df$Group <- as.factor(df$Group)
+
+# Create a color palette
+color_palette <- pal_ucscgb("default")(21)
+
+# Create the plot
+p <- ggplot(df, aes(x = TSNE1, y = TSNE2, color = Group)) +
+    geom_point(size = 0.5, alpha = 0.5) +
+    scale_color_manual(values = color_palette) +
+    scale_shape_manual(values = c(0:25)) +
+    theme_minimal() +
+    theme(
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "black"),
+        legend.position = "bottom",
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 8)
+    ) +
+    guides(
+        shape = guide_legend(override.aes = list(size = 4)),
+        color = guide_legend(override.aes = list(size = 4))
+    ) +
+    xlab("TSNE1") +
+    ylab("TSNE2") +
+    ggtitle("t-SNE")
+
+# Display the plot
+pdf(paste0(savePath, "T-SNE of subtpes sample ", sample.size, ".pdf"), height = 8, width = 8)
+print(p)
+dev.off()

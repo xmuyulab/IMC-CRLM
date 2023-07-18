@@ -1,21 +1,25 @@
 # functions for cell type abundance analysis
-library(ggplot2)
-library(ggrepel)
-library(ggsci)
-library(ggpubr)
-library(survival)
-library(tableone)
-library(forestplot)
-library(survminer)
 library(SingleCellExperiment)
+
+library(ggplot2)
+library(ggpubr)
 library(ggcor)
 library(ggridges)
-library(RColorBrewer)
 library(ggpointdensity)
-library(tidyverse)
-library(ggthemes)
-library(dplyr)
+library(ggrepel)
 library(patchwork)
+library(ggthemes)
+library(ggsci)
+library(ggunchained)
+library(RColorBrewer)
+
+library(survival)
+library(survminer)
+library(tableone)
+library(forestplot)
+
+library(tidyverse)
+library(dplyr)
 
 ## Plot the marker distribution from different batch
 PlotMarkerExpDistribution <- function(sce, savePath) {
@@ -97,8 +101,8 @@ CrossBoxplotForAbundance <- function(countdf, celltype, TypeName = NULL, clinica
     "CT_RFS_status_1" = "Relapse", "IM_RFS_status_1" = "Relapse", "TAT_RFS_status_1" = "Relapse",
     "CT_Gender_0" = "Male", "IM_Gender_0" = "Male", "TAT_Gender_0" = "Male",
     "CT_Gender_1" = "Female", "IM_Gender_1" = "Female", "TAT_Gender_1" = "Female",
-    "TAT_fong_score_4_1" = "FongScore>=4", "IM_fong_score_4_1" = "FongScore>=4", "CT_fong_score_4_1" = "FongScore>=4",
-    "CT_fong_score_4_0" = "FongScore<4", "IM_fong_score_4_0" = "FongScore<4", "TAT_fong_score_4_0" = "FongScore<4",
+    # "TAT_fong_score_4_1" = "FongScore>=4", "IM_fong_score_4_1" = "FongScore>=4", "CT_fong_score_4_1" = "FongScore>=4",
+    # "CT_fong_score_4_0" = "FongScore<4", "IM_fong_score_4_0" = "FongScore<4", "TAT_fong_score_4_0" = "FongScore<4",
     "TAT_KRAS_mutation_1" = "KRAS Mut", "IM_KRAS_mutation_1" = "KRAS Mut", "CT_KRAS_mutation_1" = "KRAS Mut",
     "CT_KRAS_mutation_0" = "WT", "IM_KRAS_mutation_0" = "WT", "TAT_KRAS_mutation_0" = "WT",
     "TAT_TBS_8_0" = "TBS<8", "CT_TBS_8_0" = "TBS<8", "IM_TBS_8_0" = "TBS<8",
@@ -109,9 +113,9 @@ CrossBoxplotForAbundance <- function(countdf, celltype, TypeName = NULL, clinica
 
   # Create custom cross-boxplot for each clinical feature group
   p <- ggplot(long_df, aes(x = Group, y = Abundance, group = Feature)) +
-    geom_point(aes(color = Group), alpha = 0.5, size = 0.5, position = position_jitter(width = 0.15)) +
+    geom_point(aes(color = Group), alpha = 0.5, size = 0.25, position = position_jitter(width = 0.15)) +
     geom_crossbar(data = summary_stats, aes(x = Group, y = Median, ymin = Median, ymax = Median), width = 0.5, color = "black", size = 1.0, inherit.aes = FALSE) +
-    geom_errorbar(data = summary_stats, aes(x = Group, ymin = Q1, ymax = Q3), width = 0, color = "black", size = 0.5, inherit.aes = FALSE) +
+    geom_errorbar(data = summary_stats, aes(x = Group, ymin = Q1, ymax = Q3), width = 0, color = "black", size = 0.25, inherit.aes = FALSE) +
     geom_text(data = class_labels, aes(x = LabelPosition, y = (max(long_df$Abundance) + 0.25), label = Class), size = 5, inherit.aes = FALSE) +
     geom_vline(xintercept = (dashed_line_positions + 0.5), linetype = "dashed", color = "black", size = 1) +
     scale_x_discrete(labels = new_labels) +
@@ -265,17 +269,17 @@ summaryClinical <- function(DF) {
     if (feature == "RFS_time_12") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "RFS_time>=12 versus <12"
     }
+    if (feature == "RFS_time_24") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "RFS_time>=24 versus <24"
+    }
     if (feature == "Recurrence_site") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Extrahepatic relapse versus Liver relapse"
     }
     if (feature == "zs_rec_riskmodel") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "High-risk versus Low-risk"
     }
-    if (feature == "fong_score_2") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "FongScore>=2 versus <2"
-    }
-    if (feature == "fong_score_4") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "FongScore>=4 versus <4"
+    if (feature == "fong_score_3") {
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "FongScore>=3 versus <3"
     }
     if (feature == "Gender") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Female versus Male"
@@ -320,7 +324,7 @@ summaryClinical <- function(DF) {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Mucinous versus Adenocarcinoma"
     }
     if (feature == "Differential_grade") {
-      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Moderately differentiate versus Lowly"
+      DF[which(DF$Feature == feature), ]$FeatureGroup <- "Well-differentiated versus Moderately-differentiated"
     }
     if (feature == "Lymph_positive") {
       DF[which(DF$Feature == feature), ]$FeatureGroup <- "Lymphonode-positive versus negative"
@@ -428,39 +432,40 @@ MultiCliDotplot <- function(plotdf, tissue, savePath) {
   return(NULL)
 }
 
-## abundance boxplot
-abundanceBoxplotMat <- function(plotdf, celltypes2Plot = NULL, MetaCol, expCol) {
-  plotdf2 <- CountMat2Plotdf(plotdf, MetaCol, expCol)
-
-  if (is.null(celltypes2Plot)) {
-    return(plotdf2)
-  } else {
-    plotdf3 <- plotdf2[plotdf2$Celltype %in% celltypes2Plot, ]
-    return(plotdf3)
-  }
-}
-
 ## Boxplot for cell subpopulations under certain clinical groups
-AbundanceBoxPlot <- function(countdf, celltypes2Plot, expCol, tissueCol, clinicalGroupCol, ClinicalGroupName) {
-  AbunBoxDF <- abundanceBoxplotMat(countdf, celltypes2Plot, MetaCol = c(tissueCol, clinicalGroupCol), expCol = expCol)
+AbundanceBoxPlot <- function(sce, countdf, celltypes2Plot, expCol, tissueCol, clinicalGroupCol, ClinicalGroupName) {
+  ## To long form
+  AbunBoxDF <- pivot_longer(countdf, cols = expCol[1]:expCol[2], values_to = "Abundance", names_to = "Celltype")
 
   AbunBoxDF[, clinicalGroupCol] <- as.factor(ifelse(AbunBoxDF[, clinicalGroupCol] == 1, ClinicalGroupName[1], ClinicalGroupName[2]))
-  colnames(AbunBoxDF)[ncol(AbunBoxDF)] <- "ClinicalGroup"
+  colnames(AbunBoxDF)[match(clinicalGroupCol, colnames(AbunBoxDF))] <- "ClinicalGroup"
 
-  p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = ClinicalGroup)) +
-    geom_boxplot(alpha = 0.7) +
+  AbunBoxDF$MajorType <- colData(sce)[match(AbunBoxDF$Celltype, sce$SubType), "MajorType"]
+
+  p <- ggplot(AbunBoxDF, aes(x = Celltype, y = Abundance, fill = ClinicalGroup)) +
+    geom_split_violin(trim = T, draw_quantiles = 0.5) +
     scale_y_continuous(name = "Cell Abundance") +
     scale_x_discrete(name = "Cell Population") +
+    scale_fill_lancet() +
+    stat_compare_means(aes(group = ClinicalGroup),
+      method = "t.test",
+      hide.ns = TRUE, # Hide non-significant comparisons
+      label = "p.signif",
+      label.y.npc = "middle"
+    ) +
+    facet_grid(Tissue ~ MajorType, scales = "free") +
     theme_bw() +
     theme(
       plot.title = element_text(size = 14, face = "bold"),
       text = element_text(size = 12),
       axis.title = element_text(face = "bold"),
-      axis.text.x = element_text(size = 11, angle = 90)
-    ) +
-    facet_wrap(~Celltype, ncol = 2) +
-    scale_fill_lancet() +
-    stat_compare_means(aes(group = ClinicalGroup), label.y = 0.4, method = "t.test", label = "p.signif")
+      axis.text.x = element_text(size = 11, angle = 90, hjust = 1, vjust = 0.5),
+      strip.background = element_blank(), # Remove facet grid background
+      panel.background = element_blank(), # Make the panel background empty
+      panel.grid.major = element_blank(), # Remove major grid lines
+      panel.grid.minor = element_blank(), # Remove minor grid lines
+      panel.border = element_blank() # Remove borders around the facets
+    )
 
   return(p)
 }
@@ -505,7 +510,7 @@ abundanceSurvivalCorrelation <- function(plotdf) {
 }
 
 ## meta analysis
-MultipleUniCOX <- function(df) {
+MultipleUniCOX <- function(df, do.scale = FALSE, UniCOX = TRUE) {
   result <- matrix(data = NA, nrow = 0, ncol = 6)
   result <- as.data.frame(result)
 
@@ -519,42 +524,79 @@ MultipleUniCOX <- function(df) {
   features <- colnames(df)[1:(ncol(df) - 2)]
   cat("The features in multi-cox are: ", features, "\n")
 
-  features <- features[-(match(c("RFS_time", "RFS_status"), features))]
+  # features <- features[-(match(c("RFS_time", "RFS_status"), features))]
 
-  univ_formulas <- sapply(
-    features,
-    function(x) {
-      as.formula(paste0("Surv(RFS_time, RFS_status)~", x))
+  if (do.scale) {
+    continuousVar <- c()
+    for (feature in features) {
+      a <- df[, match(feature, colnames(df))]
+      if (length(table(a)) >= nrow(df) / 2) {
+        continuousVar <- c(continuousVar, feature)
+      }
     }
-  )
 
-  univ_models <- lapply(univ_formulas, function(x) {
-    coxph(x, data = df)
-  })
-
-  univ_results <- lapply(univ_models, function(x) {
-    mul_cox1_result <- summary(x)
-    multi1 <- round(mul_cox1_result$conf.int[, c(1, 3, 4)], 4)
-    multi1 <- as.data.frame(t(multi1))
-
-    multi2 <- ShowRegTable(
-      x,
-      exp = TRUE,
-      digits = 2, pDigits = 3,
-      printToggle = TRUE, quote = FALSE, ciFun = confint
-    )
-
-    result <- cbind(multi1, multi2)
-    result <- cbind(Features = rownames(result), result)
-
-    return(result)
-  })
-
-  for (x in univ_results) {
-    result <- rbind(result, x)
+    df[, match(continuousVar, colnames(df))] <- apply(df[, match(continuousVar, colnames(df))], MARGIN = 2, function(a) {
+      scale(a)
+    })
   }
 
-  return(result)
+  if (UniCOX) {
+    univ_formulas <- sapply(
+      features,
+      function(x) {
+        as.formula(paste0("Surv(RFS_time, RFS_status)~", x))
+      }
+    )
+
+    univ_models <- lapply(univ_formulas, function(x) {
+      coxph(x, data = df)
+    })
+
+    univ_results <- lapply(univ_models, function(x) {
+      ftest <- cox.zph(x)
+      ftest
+      mul_cox1_result <- summary(x)
+      multi1 <- round(mul_cox1_result$conf.int[, c(1, 3, 4)], 4)
+      multi1 <- as.data.frame(t(multi1))
+
+      multi2 <- ShowRegTable(
+        x,
+        exp = TRUE,
+        digits = 2, pDigits = 3,
+        printToggle = TRUE, quote = FALSE, ciFun = confint
+      )
+
+      result <- cbind(multi1, multi2)
+      result <- cbind(Features = rownames(result), result)
+
+      return(result)
+    })
+
+    for (x in univ_results) {
+      result <- rbind(result, x)
+    }
+
+    return(result)
+  } else {
+    formula_ <- paste0("Surv(RFS_time, RFS_status)~", features[1])
+    for (i in 2:length(features)) {
+      formula_ <- paste0(formula_, "+", features[i])
+    }
+    mul_cox <- coxph(as.formula(formula_), data = df)
+    mul_cox1 <- summary(mul_cox)
+
+    multi1 <- as.data.frame(round(mul_cox1$conf.int[, c(1, 3, 4)], 2))
+    multi2 <- ShowRegTable(mul_cox,
+      exp = TRUE,
+      digits = 2,
+      pDigits = 3,
+      printToggle = TRUE,
+      quote = FALSE,
+      ciFun = confint
+    )
+    result <- cbind(Features = rownames(multi2), multi1, multi2)
+    return(result)
+  }
 }
 
 abundanceMetaAnalysis <- function(plotdf, celltypes2Plot, clinical, features, tissue, savePath) {
@@ -769,57 +811,6 @@ BarPlotForCelltypeFraction <- function(sce, rowSep, colSep, savePath) {
   plotdf <- as.data.frame(plotdf)
   colnames(plotdf) <- c("Majortype", "Subtype", "ROI", "Tissue", "Relapse")
 
-  colors <- c(brewer.pal(9, "Set1"), brewer.pal(8, "Set2"), brewer.pal(12, "Set3"))
-  plotdf$Subtype <- as.factor(plotdf$Subtype)
-  plotdf$Majortype <- as.factor(plotdf$Majortype)
-
-  savePath2 <- paste0(savePath, "AbundanceFraction/")
-  if (!file.exists(savePath2)) {
-    dir.create(savePath2)
-  }
-
-  for (tissue in names(table(Tissues))) {
-    plotdfTemp1 <- subset(plotdf, Tissue == tissue)
-    for (group in names(table(Groups))) {
-      plotdfTemp2 <- subset(plotdfTemp1, Relapse == group)
-      for (majortype in majortypes) {
-        plotdfTemp3 <- subset(plotdfTemp2, Majortype == majortype)
-        plotdfTemp3$Subtype <- as.factor(as.character(plotdfTemp3$Subtype))
-
-        p <- ggplot(plotdfTemp3, aes(x = ROI, fill = Subtype)) +
-          geom_bar(stat = , color = "black", width = .5, position = "fill") +
-          labs(y = "Relative abundance (%)") +
-          scale_fill_manual(values = colors) +
-          scale_y_continuous(expand = c(0, 0)) +
-          theme_classic() +
-          theme(
-            axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5, size = 5)
-          )
-
-        pdf(paste0(savePath2, majortype, " Abundance Barplot of Relapse_", group, " in ", tissue, ".pdf"), height = 6, width = 8)
-        print(p)
-        dev.off()
-      }
-    }
-  }
-
-  return(NULL)
-}
-
-BarPlotForCelltypeFraction2 <- function(sce, rowSep, colSep, savePath) {
-  meta <- colData(sce)
-
-  Majortypes <- meta[, "MajorType"]
-  majortypes <- names(table(Majortypes))
-  Subtypes <- meta[, "SubType"]
-  IDs <- meta[, "ID"]
-  Tissues <- meta[, rowSep]
-  Groups <- meta[, colSep]
-
-  plotdf <- cbind(Majortypes, Subtypes, IDs, Tissues, Groups)
-  plotdf <- as.data.frame(plotdf)
-  colnames(plotdf) <- c("Majortype", "Subtype", "ROI", "Tissue", "Relapse")
-
   df <- plotdf[, c(2, 3, 4)]
   # Calculate the total cell count for each ROI and Tissue combination
   cell_count <- df %>%
@@ -845,7 +836,7 @@ BarPlotForCelltypeFraction2 <- function(sce, rowSep, colSep, savePath) {
     arrange(Tissue, ROI)
 
   # Create a color palette for the subtypes
-  subtype_palette <- c(pal_lancet("lanonc")(7),pal_jama("default")(7),pal_jco("default")(10))
+  subtype_palette <- c(pal_lancet("lanonc")(7), pal_jama("default")(7), pal_jco("default")(10))
 
   # Create the ggplot stacked bar plot with enhanced visual style
   p <- ggplot(cell_fraction, aes(x = factor(ROI, levels = roi_tissue$ROI), y = Fraction, fill = Subtype)) +
@@ -898,6 +889,65 @@ BarPlotForCelltypeFraction2 <- function(sce, rowSep, colSep, savePath) {
   return(NULL)
 }
 
+BarPlotForCelltypeCounts <- function(sce, tissueCol, groupCol, savePath) {
+  ## Get meta data
+  meta <- colData(sce)
+
+  countdf <- Transform_CellCountMat(sceobj = sce, group = c("IM", "CT", "TAT"), clinicalFeatures = c("ID", tissueCol, groupCol), is.fraction = T)
+
+  plotdf <- pivot_longer(countdf, cols = 1:20, names_to = "Subpopulation", values_to = "Fraction")
+
+  plotdf <- plotdf[, -c(1:2)]
+  plotdf2 <- plotdf %>%
+    group_by(Tissue, RFS_status, Subpopulation) %>%
+    summarise(across(c(1:(ncol(plotdf) - 3)), mean, na.rm = TRUE))
+
+  plotdf2$MajorType <- meta[match(plotdf2$Subpopulation, meta$SubType), "MajorType"]
+
+  # Create a list of colors
+  colors <- ggsci::pal_ucscgb("default")(26)
+
+  plotdf2 <- as.data.frame(plotdf2)
+
+  plotdf2[, 1] <- as.character(plotdf2[, 1])
+  plotdf2[, 2] <- as.factor(plotdf2[, 2])
+  plotdf2[, 3] <- as.character(plotdf2[, 3])
+  plotdf2[, 4] <- as.numeric(plotdf2[, 4])
+  plotdf2[, 5] <- as.character(plotdf2[, 5])
+
+  # Create the bar plot
+  p <- ggplot(plotdf2, aes(x = RFS_status, y = Fraction, fill = Subpopulation)) +
+    # Add bars
+    geom_bar(stat = "identity") +
+    # Use different sets of colors for different MajorTypes
+    scale_fill_manual(values = colors) +
+    # Rotate the x-axis labels to make them readable
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    # Add title and labels
+    labs(
+      title = "Fraction of each Subpopulation by RFS_status and Tissue",
+      x = "RFS Status", y = "Fraction", fill = "Subpopulation"
+    ) +
+    # Flip the coordinates
+    coord_flip() +
+    # Separate the plot by Tissue and MajorType
+    facet_grid(MajorType ~ Tissue, scales = "free") +
+    # Hide the borders of the facet grid, make the background of the facet to be empty
+    theme(
+      strip.background = element_blank(),
+      panel.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank()
+    )
+
+  pdf(paste0("Abundance Barplot of Relapse.pdf"), height = 7.5, width = 10)
+  print(p)
+  dev.off()
+
+  return(NULL)
+}
+
 ## Plot the density dotplot of certain 2 channles
 PlotDensityDotplot <- function(sce, marker1, marker2, MajorType = NULL, sampleSize = 100000, savePath) {
   if (!is.null(MajorType)) {
@@ -935,4 +985,36 @@ PlotDensityDotplot <- function(sce, marker1, marker2, MajorType = NULL, sampleSi
   dev.off()
 
   return(NULL)
+}
+
+## Get mean expression profile
+GetMeanExpressionProfile <- function(sce, LevelCol, markers, clinicalGroupCol) {
+  ids <- names(table(colData(sce)[, LevelCol]))
+
+  df <- matrix(data = NA, nrow = length(ids), ncol = length(markers))
+  clinicalMat <- matrix(data = NA, nrow = 0, ncol = length(clinicalGroupCol))
+  for (i in 1:length(ids)) {
+    idx <- ids[i]
+    ## Subset the sce object
+    sceTemp <- sce[, colData(sce)[, LevelCol] %in% idx]
+    numCell <- ncol(sceTemp)
+    ## Get the expression profile
+    expTemp <- assay(sceTemp)
+    expTemp <- expTemp[match(markers, rownames(expTemp)), ]
+    df[i, ] <- apply(expTemp, MARGIN = 1, FUN = "mean")
+    clinicalTemp <- colData(sceTemp)[1, match(clinicalGroupCol, colnames(colData(sceTemp)))]
+    clinicalMat <- rbind(clinicalMat, as.matrix(clinicalTemp))
+  }
+
+  ## rename
+  rownames(df) <- ids
+  colnames(df) <- markers
+  colnames(clinicalMat) <- clinicalGroupCol
+  rownames(clinicalMat) <- ids
+
+  ## return list
+  list_ <- list()
+  list_[["df"]] <- df
+  list_[["clinicalGroup"]] <- clinicalMat
+  return(list_)
 }
