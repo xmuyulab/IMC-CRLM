@@ -28,14 +28,8 @@ if (!dir.exists(savePath)) {
 ## Load clinical
 clinical <- read.csv("/mnt/data/lyx/IMC/clinical.csv", header = T)
 
-## remain Tissue associated Tumor
-sce <- sce[, sce$Tissue == "IM"]
-# sce <- sce[, sce$Tissue == "TAT"]
-
-# sce <- sce[, sce$Tissue == "IM" | sce$Tissue == "CT"]
-
 ## Load CNP
-scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/structure/cellular_neighbor_IM.csv")
+scimapResult <- read.csv("/mnt/data/lyx/IMC/analysis/structure/cellular_neighbor_All.csv")
 scimapResult <- scimapResult[, -1]
 
 colnames(scimapResult)
@@ -58,7 +52,7 @@ HeatmapForMarkersInGroups(sce, metaMarkers, groupCol = "RFS_status", adjust.p = 
 sce <- sce[, sce$Tissue %in% c("IM", "TAT")]
 HeatmapForMarkersInGroups(sce, markers = metaMarkers, groupCol = "Tissue", adjust.p = T, FCthreshold = 1.2, savePath)
 ### Volcano
-if (F) {
+if (T) {
     sce_ <- sce[, sce$Tissue %in% c("IM", "TAT")]
     sce_ <- sce_[, sce_$SubType %in% c("Treg")]
     mat <- as.data.frame(t(assay(sce_)[metaMarkers, ]))
@@ -70,439 +64,7 @@ if (F) {
     VolcanoPlot(FCDF, pthreshold = 0.05, fcthreshold = 1.4, feature = "Treg in different tissue", filename = paste0("/mnt/data/lyx/IMC/analysis/reclustering/Treg markers diff in IM and TAT.pdf"), Qvalue = TRUE)
 }
 
-## Treg & Mono_CD11c - Reclustering
-anajorTypes <- c("Myeloid", "Lymphocyte")
-anaclusterNames <- c("Mono_CD11c", "Treg")
-structure <- "CNP20"
-
-for (i in 1:length(anajorTypes)) {
-    MajorName <- anajorTypes[i]
-    SubName <- anaclusterNames[i]
-
-    savePathTemp1 <- paste0(savePath, SubName, "/")
-    if (!dir.exists(savePathTemp1)) {
-        dir.create(savePathTemp1, recursive = T)
-    }
-
-    ## Reclustering
-    sce_ <- Reclustering(sce, markers = metaMarkers, ReMajorType = MajorName, ReclusterName = SubName, ReSubType = SubName, PatternCol = structure, ncluster = 15, savePath = savePathTemp1)
-
-    ## Cluster difference
-    reclusterAbun <- GetAbundance(sce_, countcol = SubName, is.fraction = T)
-    colnames(reclusterAbun)[1:15] <- sapply(colnames(reclusterAbun)[1:15], function(x) {
-        return(paste0("rec_", x))
-    })
-    reclusterAbun$RFS_status <- as.factor(reclusterAbun$RFS_status)
-    plotdf <- as.data.frame(matrix(data = NA, nrow = 15 * nrow(reclusterAbun), ncol = 3))
-    plotdf[, 1] <- rep(colnames(reclusterAbun)[1:15], each = nrow(reclusterAbun))
-    plotdf[, 2] <- as.numeric(as.matrix(reclusterAbun[, 1:15]))
-    plotdf[, 3] <- rep(reclusterAbun$RFS_status, times = 15)
-
-    colnames(plotdf) <- c("ReCluster", "Abundance", "Group")
-
-    if (F) {
-        plotdf <- plotdf[plotdf$ReCluster %in% c("rec_13", "rec_8", "rec_5", "rec_12"), ]
-        rownames(plotdf) <- 1:nrow(plotdf)
-    }
-
-    p <- ggplot(plotdf, aes(x = Group, y = Abundance, fill = Group)) +
-        geom_boxplot(alpha = 0.7, color = "black", outlier.shape = NA) +
-        scale_y_continuous(name = "Cell Abundance") +
-        scale_x_discrete(name = "Cell Population") +
-        scale_fill_manual(values = c("#56B4E9", "#D55E00")) +
-        theme_bw() +
-        theme(
-            plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-            text = element_text(size = 12),
-            axis.title = element_text(face = "bold"),
-            axis.text.x = element_text(size = 11, angle = 90),
-            legend.position = "none",
-            strip.text = element_text(size = 12, face = "bold"),
-            strip.background = element_blank(),
-            panel.border = element_rect(color = "black", fill = NA, size = 1),
-            panel.grid.major = element_line(color = "gray", size = 0.5),
-            panel.grid.minor = element_blank()
-        ) +
-        stat_compare_means(aes(group = Group), label.y = .4, method = "t.test") +
-        facet_wrap(~ReCluster, ncol = 4)
-
-    # pdf(paste0(savePathTemp1, "recluster_abundance_analysis(part).pdf"), width = 8, height = 4)
-    pdf(paste0(savePathTemp1, "recluster_abundance_analysis.pdf"), width = 8, height = 6)
-    print(p)
-    dev.off()
-
-    saveRDS(sce_, paste0(savePathTemp1, SubName, "_recluster.rds"))
-}
-
-interstTypeList <- list()
-interstTypeList[[1]] <- c("1", "7") ## PD-L1+ CD11c+ Monocytes
-interstTypeList[[2]] <- c("5", "8") ## PD-1+ Foxp3+ Lymphocytes
-
-for (i in 1:length(anajorTypes)) {
-    MajorName <- anajorTypes[i]
-    SubName <- anaclusterNames[i]
-
-    savePathTemp1 <- paste0(savePath, SubName, "/")
-    if (!dir.exists(savePathTemp1)) {
-        dir.create(savePathTemp1, recursive = T)
-    }
-    sce_ <- readRDS(paste0("/mnt/data/lyx/IMC/analysis/reclustering/", SubName, "/", SubName, "_recluster.rds"))
-    ## Assign the new label
-    interstType <- interstTypeList[[i]]
-
-    TempList <- AssignNewlabel(sce_,
-        allROIs = names(table(sce$ID)), phenoLabel = paste0(SubName, "_Type"), ReclusterName = SubName, interstType = interstType,
-        clinicalFeatures = c("RFS_time", "RFS_status"), cutoffType = "mean", cutoffValue = 20, numGroup = 2
-    )
-    sce_Temp <- TempList[[1]]
-    high_ROI <- TempList[[2]]
-    low_ROI <- TempList[[3]]
-
-    if (F) {
-        ## spatial interaction analysis
-        sce_Temp <- sce_Temp[, sce_Temp$Treg_Type == "Pheno_pos"]
-        sce$SubType[match(sce_Temp$CellID, sce$CellID)] <- "Acitve Treg"
-
-        library(spatstat)
-        ROIs <- names(table(sce$ID))
-
-        # Define the whole image size
-        xlim <- c(0, 1000)
-        ylim <- c(0, 1000)
-
-        # Record the 10-nn cells of PD-L1+ CD11c+ Monocytes
-        nn10_NeighborsList <- list()
-
-        for (ROI in ROIs) {
-            sce_ <- sce[, sce$ID == ROI]
-
-            coor <- sce_$Position
-            coor_df <- GetXandY(coor)
-            coor_df$SubType <- sce_$SubType
-
-            head(coor_df)
-
-            # Convert your data frame to a ppp object
-            points_ppp <- ppp(coor_df$cor_x, coor_df$cor_y, xrange = xlim, yrange = ylim, marks = coor_df$SubType)
-
-            # Find nearest neighbors
-            nn <- nncross(points_ppp, points_ppp, k = 2:11)
-
-            nn10_neighbors <- nn[, 11:ncol(nn)]
-            nn10_neighbors <- apply(nn10_neighbors, MARGIN = 2, function(x) {
-                x <- as.numeric(x)
-                return(sce_$CellID[x])
-            })
-
-            PDL1CD11c_idx <- (sce_$SubType == "Acitve Treg")
-            nn10_neighbors_ <- nn10_neighbors[PDL1CD11c_idx, ]
-            # table(nn10_neighbors_)
-
-            nn10_NeighborsList[[ROI]] <- as.numeric(nn10_neighbors_)
-        }
-        Subtypes <- names(table(sce$SubType))
-        InterDF <- as.data.frame(matrix(data = NA, nrow = length(nn10_NeighborsList), ncol = length(Subtypes)))
-        colnames(InterDF) <- Subtypes
-
-        for (i in 1:length(nn10_NeighborsList)) {
-            CellIDTemp <- nn10_NeighborsList[[i]]
-            CelltypeTemp <- sce$SubType[match(CellIDTemp, sce$CellID)]
-            CelltypeTemp <- factor(CelltypeTemp, levels = Subtypes)
-            CelltypeTemp <- as.data.frame(table(CelltypeTemp))
-            InterDF[i, ] <- CelltypeTemp[, 2]
-        }
-        rownames(InterDF) <- names(nn10_NeighborsList)
-        InterDF$PID <- sapply(rownames(InterDF), function(x) {
-            return(strsplit(x, "_")[[1]][1])
-        })
-        InterDF$RFS_status <- sce$RFS_status[match(InterDF$PID, sce$PID)]
-
-        plotdf <- tidyr::pivot_longer(InterDF, 1:22, names_to = "Neighbors", values_to = "Number")
-        plotdf$RFS_status <- as.factor(plotdf$RFS_status)
-        color <- ggsci::pal_aaas("default")(10)
-        p <- ggplot(data = plotdf, aes(x = Neighbors, y = Number, fill = RFS_status)) +
-            geom_boxplot(show.legend = FALSE, outlier.shape = NA, alpha = 0.8) +
-            theme_bw() +
-            labs(x = NULL, y = "Count", title = "Box Plot of Counts by Group and Cell Type") +
-            stat_compare_means(
-                aes(group = RFS_status),
-                method = "t.test",
-                label = "p.signif",
-                hide.ns = T,
-                size = 4
-            ) +
-            theme(
-                plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-                axis.title = element_text(size = 12, face = "bold"),
-                axis.text = element_text(size = 10),
-                axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5),
-                strip.text = element_text(size = 12, face = "bold"),
-                strip.background = element_blank(),
-                panel.border = element_rect(color = "black", fill = NA, size = 1),
-                panel.grid.major = element_line(color = "gray", size = 0.5),
-                panel.grid.minor = element_blank()
-            )
-        pdf("test.pdf", height = 6, width = 10)
-        print(p)
-        dev.off()
-        if (F) {
-            allNeighbors <- unlist(nn10_NeighborsList)
-            allNeighbors_SubType <- sce$SubType[allNeighbors]
-
-            ## Compare CD8T
-            CD8T_idx <- sce$CellID[(sce$SubType == "CD8T")]
-            CD8T_seu <- sce[, sce$CellID %in% CD8T_idx]
-
-            Interact_CD8T_idx <- as.numeric(intersect(CD8T_idx, allNeighbors))
-            Remain_CD8T_idx <- as.numeric(setdiff(CD8T_idx, Interact_CD8T_idx))
-
-            CD8T_seu$label <- "0"
-            CD8T_seu$label[match(Interact_CD8T_idx, CD8T_seu$CellID)] <- "1"
-
-            mat <- as.data.frame(t(assay(CD8T_seu)))
-            mat$label <- CD8T_seu$label
-
-            xCol <- c(1, 35)
-            yCol <- 36
-            mat_foldchangeMat <- FCandPvalueCal(mat, xCol = xCol, yCol = yCol)
-            mat_foldchangeMat$Q.value <- p.adjust(mat_foldchangeMat$P.value, method = "BH")
-            mat_foldchangeMat$P.value <- mat_foldchangeMat$Q.value
-
-            VolcanoPlot(mat_foldchangeMat, pthreshold = 0.05, fcthreshold = 1.2, feature = NULL, filename = "testC8T.pdf")
-        }
-
-        ## Take mean
-        MeanDensity <- as.data.frame(matrix(data = NA, nrow = length(DensityList), ncol = 2))
-
-        for (i in 1:length(DensityList)) {
-            MeanDensity[i, ] <- apply(DensityList[[i]], MARGIN = 2, FUN = "mean")
-        }
-        rownames(MeanDensity) <- names(DensityList)
-        colnames(MeanDensity) <- colnames(DensityList[[1]])
-        MeanDensity$SL <- MeanDensity[, 1] / MeanDensity[, 2]
-
-        MeanDensity$PID <- sapply(rownames(MeanDensity), function(x) {
-            return(strsplit(x, "_")[[1]][1])
-        })
-        MeanDensity$RFS_time <- clinical$RFS_time[match(MeanDensity$PID, clinical$PID)]
-        MeanDensity$RFS_status <- clinical$RFS_status[match(MeanDensity$PID, clinical$PID)]
-
-        MeanDensity <- MeanDensity %>%
-            group_by(PID) %>%
-            summarise(across(c(1:5), mean, na.rm = TRUE))
-
-        cutpoint <- surv_cutpoint(data = MeanDensity, time = "RFS_time", event = "RFS_status", variables = "SL")
-        cutpoint <- summary(cutpoint)$cutpoint
-
-        df <- MeanDensity[, c("SL", "RFS_status", "RFS_time")]
-        df[, 1] <- ifelse(df[, 1] >= cutpoint, "high", "low")
-
-        df$RFS_status <- as.numeric(df$RFS_status)
-        df$RFS_time <- as.numeric(df$RFS_time)
-
-        ## km curve
-        fit <- survfit(Surv(RFS_time, RFS_status) ~ SL, data = df)
-        p <- ggsurvplot(fit,
-            data = df,
-            linetype = c("solid", "solid"),
-            surv.median.line = "hv", surv.scale = "percent",
-            pval = T, risk.table = T,
-            conf.int = T, conf.int.alpha = 0.1, conf.int.style = "ribbon",
-            risk.table.y.text = T,
-            palette = c("#3300CC", "#CC3300"),
-            xlab = "Recurrence time"
-        )
-
-        pdf("KM for Stromal:Lymphocyte density (Patient).pdf", width = 8, height = 6)
-        print(p)
-        dev.off()
-    }
-
-    # colData(sce)[match(colData(sce_Temp)[colData(sce_Temp)$Mono_CD11c_Type=="Pheno_pos", ]$CellID, colData(sce)$CellID), "SubType"] <- "PDL1+ Mono_CD11c"
-    # colData(sce)[match(colData(sce_Temp)[colData(sce_Temp)$Treg_Type=="Pheno_pos", ]$CellID, colData(sce)$CellID), "SubType"] <- "PD1+ Treg"
-    # table(sce$SubType)
-    ## saveRDS(sce,"/mnt/data/lyx/IMC/analysis/allsce(new).rds")
-
-    ## marker difference
-    sce__ <- sce_[, sce_$SubType %in% SubName]
-    mat <- as.data.frame(t(assay(sce_)[metaMarkers, ]))
-    mat$phenoLabel <- 0
-    mat$phenoLabel[colData(sce_)[, SubName] %in% interstType] <- 1
-    FCDF <- FCandPvalueCal(mat, xCol = c(1, length(metaMarkers)), yCol = (length(metaMarkers) + 1), need.sample = TRUE)
-    VolcanoPlot(FCDF, pthreshold = 0.01, fcthreshold = 3, feature = "Phenotype-Associated cells", filename = paste0(savePathTemp1, "Phenotype-associated differential markers in ", SubName, ".pdf"), Qvalue = TRUE)
-
-    ## spatial difference
-    ResultPath <- paste0("/mnt/data/lyx/IMC/analysis/spatial/permutation_IM/")
-    celltypes <- names(table(sce$SubType))
-    celltypes
-
-    ### high ROIs
-    list_ <- getResult(ResultPath, ROIs = high_ROI, celltypes)
-    MergeDF1 <- list_[[1]]
-    labelDF1 <- list_[[2]]
-    rm(list_)
-
-    ### low ROIs
-    list_ <- getResult(ResultPath, ROIs = low_ROI, celltypes)
-    MergeDF2 <- list_[[1]]
-    labelDF2 <- list_[[2]]
-    rm(list_)
-
-    DoubleHeat(MergeDF1, labelDF1,
-        group1 = paste0(SubName, " high"),
-        MergeDF2, labelDF2, group2 = paste0(SubName, " low"), plot = "groupheatmap",
-        savePath = paste0(savePathTemp1, SubName, " Interaction Heatmap.pdf")
-    )
-    ### Different
-    Sig <- 0.01
-    getInteracDiff(ResultPath, sce, celltypes = celltypes, savepath = paste0(savePathTemp1, SubName, "_Spatial_Diff_", Sig, ".pdf"), IDs1 = high_ROI, IDs2 = low_ROI, Sig = Sig)
-
-    ### plot the cell subtype number different
-    sce_Temp1 <- sce[, sce$ID %in% high_ROI]
-    HighCountMat1 <- GetAbundance(sce_Temp1, countcol = "SubType", is.fraction = T)
-    HighCountMat2 <- GetAbundance(sce_Temp1, countcol = structure, is.fraction = T)
-
-    sce_Temp2 <- sce[, sce$ID %in% low_ROI]
-    lowCountMat1 <- GetAbundance(sce_Temp2, countcol = "SubType", is.fraction = T)
-    lowCountMat2 <- GetAbundance(sce_Temp2, countcol = structure, is.fraction = T)
-
-
-    #### celltype
-    celltypes <- names(table(sce$SubType))
-    savePathTemp <- paste0(savePathTemp1, "/CellAbundance/")
-    if (!file.exists(savePathTemp)) {
-        dir.create(savePathTemp, recursive = T)
-    }
-    for (celltype in celltypes) {
-        AbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), celltype = celltype, marker = SubName, savePath = savePathTemp, numGroup = 2)
-    }
-
-    #### Multiple cell subpopulations abudnace plot
-    PlotTypes <- c("CD8T", "Macro_HLADR", "Macro_CD11b", "Macro_CD163", "Macro_CD169", "Treg")
-    p <- MultipleAbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), PlotTypes = PlotTypes, marker = SubName, numGroup = 2, style = "box")
-    pdf(paste0(savePathTemp1, "ViolinPlot of multiple celltypes in ", marker, " group.pdf"), height = 10, width = 8)
-    print(p)
-    dev.off()
-
-    #### CNPs
-    k_structures <- names(table(colData(sce)[, structure]))
-    savePathTemp <- paste0(savePathTemp1, "/StructureAbundance/")
-    if (!file.exists(savePathTemp)) {
-        dir.create(savePathTemp, recursive = T)
-    }
-    for (k_structure in k_structures) {
-        AbundanceSwarmPlot(HighCountMat2, lowCountMat2, groupsName = c("high", "low"), celltype = k_structure, marker = SubName, savePath = savePathTemp, numGroup = 2)
-    }
-
-    #### survival
-    CountMat <- GetAbundance(sce_Temp, countcol = paste0(SubName, "_Type"), is.fraction = T, is.reuturnMeans = F)
-
-    SurvivalForPhenoAssoLabel(CountMat, GroupCol = "Pheno_pos", time = "RFS_time", status = "RFS_status", marker = SubName, cutoffType = "best", savePath = savePathTemp1)
-}
-
-## CD163+ Macrophage analysis
-if (T) {
-    SubName <- "Macro_CD163"
-    interstType <- "Macro_CD163"
-
-    savePathTemp1 <- paste0(savePath, SubName, "/")
-    if (!dir.exists(savePathTemp1)) {
-        dir.create(savePathTemp1, recursive = T)
-    }
-
-    ## Assign the new label
-    TempList <- AssignNewlabel(sce, allROIs = names(table(sce$ID)), phenoLabel = paste0(SubName, "_Label"), ReclusterName = "SubType", interstType = interstType, cutoffType = "mean", cutoffValue = 20, numGroup = 2)
-    sceTemp <- TempList[[1]]
-    high_ROI <- TempList[[2]]
-    low_ROI <- TempList[[3]]
-
-    ## spatial difference
-    ResultPath <- paste0("/mnt/data/lyx/IMC/analysis/spatial/permutation_IM/")
-    celltypes <- names(table(sce$SubType))
-    celltypes
-
-    ### high ROIs
-    list_ <- getResult(ResultPath, ROIs = high_ROI, celltypes)
-    MergeDF1 <- list_[[1]]
-    labelDF1 <- list_[[2]]
-    rm(list_)
-
-    ### low ROIs
-    list_ <- getResult(ResultPath, ROIs = low_ROI, celltypes)
-    MergeDF2 <- list_[[1]]
-    labelDF2 <- list_[[2]]
-    rm(list_)
-
-    DoubleHeat(MergeDF1, labelDF1,
-        group1 = paste0(SubName, " high"),
-        MergeDF2, labelDF2, group2 = paste0(SubName, " low"), plot = "groupheatmap",
-        savePath = paste0(savePathTemp1, SubName, " Interaction Heatmap.pdf")
-    )
-    ### Different
-    getInteracDiff(ResultPath, sce, celltypes = celltypes, savepath = paste0(savePathTemp1, SubName, "_Spatial_Diff_0.01.pdf"), IDs1 = high_ROI, IDs2 = low_ROI, Sig = 0.01)
-
-    PlotTypes <- c("B", "CD4T", "CD8T", "Treg", "Macro_CD163", "Macro_CD169", "Mono_Classic", "Mono_Intermediate")
-    p <- InterDiffInvertBarplot(
-        ResultPath = ResultPath, sce = sce, PlotTypes = PlotTypes,
-        IDs1 = high_ROI, IDs2 = low_ROI
-    )
-    pdf(paste0(savePathTemp1, SubName, "_Spatial_Diff_Barplot.pdf"), height = 6, width = 8)
-    print(p)
-    dev.off()
-
-    p <- InterAbundanceBarplot(
-        ResultPath = ResultPath, sce = sce, PlotTypes = PlotTypes, groupsName = c("High", "Low"), IDs1 = high_ROI, IDs2 = low_ROI
-    )
-    pdf(paste0(savePathTemp1, SubName, "_SpatialAbundance.pdf"), height = 6, width = 10)
-    print(p)
-    dev.off()
-
-    ### plot the cell subtype number different
-    sceTemp1 <- sce[, sce$ID %in% high_ROI]
-    HighCountMat1 <- GetAbundance(sceTemp1, countcol = "SubType", is.fraction = T)
-    HighCountMat2 <- GetAbundance(sceTemp1, countcol = structure, is.fraction = T)
-
-    sceTemp2 <- sce[, sce$ID %in% low_ROI]
-    lowCountMat1 <- GetAbundance(sceTemp2, countcol = "SubType", is.fraction = T)
-    lowCountMat2 <- GetAbundance(sceTemp2, countcol = structure, is.fraction = T)
-
-
-    #### celltype
-    celltypes <- names(table(sce$SubType))
-    savePathTemp <- paste0(savePathTemp1, "CellAbundance/")
-    if (!file.exists(savePathTemp)) {
-        dir.create(savePathTemp, recursive = T)
-    }
-    for (celltype in celltypes) {
-        AbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), celltype = celltype, marker = SubName, savePath = savePathTemp, numGroup = 2)
-    }
-
-    #### Multiple cell subpopulations abudnace plot
-    PlotTypes <- c("B", "CD8T", "Macro_CD11b", "Macro_CD163", "Macro_CD169", "Treg")
-    p <- MultipleAbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), PlotTypes = PlotTypes, marker = SubName, numGroup = 2, style = "violin")
-    pdf(paste0(savePathTemp1, "ViolinPlot of multiple celltypes in ", marker, " group.pdf"), height = 10, width = 8)
-    print(p)
-    dev.off()
-
-    #### CNPs
-    k_structures <- names(table(colData(sce)[, structure]))
-    savePathTemp <- paste0(savePathTemp1, "StructureAbundance/")
-    if (!file.exists(savePathTemp)) {
-        dir.create(savePathTemp, recursive = T)
-    }
-    for (k_structure in k_structures) {
-        AbundanceSwarmPlot(HighCountMat2, lowCountMat2, groupsName = c("high", "low"), celltype = k_structure, marker = SubName, savePath = savePathTemp, numGroup = 2)
-    }
-
-    #### survival
-    CountMat <- GetAbundance(sceTemp, countcol = paste0(SubName, "_Label"), is.fraction = T, is.reuturnMeans = F)
-
-    SurvivalForPhenoAssoLabel(CountMat, GroupCol = "Pheno_pos", time = "RFS_time", status = "RFS_status", marker = SubName, cutoffType = "best", savePath = savePathTemp1)
-}
-
-## Treg analysis - 2
-## Hypothesis: The PD-1+ Treg only in IM but not in TAT
-## Treg Reclustering
+## Treg reclustering analysis
 if (T) {
     TargeType <- "Treg"
     savePathTemp1 <- paste0(savePath, TargeType, "/")
@@ -585,7 +147,7 @@ if (T) {
     saveRDS(sce_Type, paste0(savePathTemp1, "Treg_recluster.rds"))
 }
 
-## investigate the tissue specificity of PD-1+ CD27+ Treg
+## investigate the tissue specificity of Active Treg
 if (T) {
     sce_ <- readRDS(paste0(savePathTemp1, "Treg_recluster.rds"))
 
@@ -600,8 +162,8 @@ if (T) {
     plotdf2 <- plotdf2[plotdf2$Tissue %in% c("IM", "CT", "TAT"), ]
     colnames(plotdf2)[1] <- "Abundance"
 
-    p <- ggplot(plotdf2, aes(x = Tissue, y = Abundance, fill = "#56B4E9")) +
-        geom_boxplot(alpha = 0.7, color = "black", outlier.shape = NA) +
+    p <- ggplot(plotdf2, aes(x = Tissue, y = Abundance)) +
+        geom_boxplot(alpha = 0.7, color = "black", fill = "#56B4E9", outlier.shape = NA) + # move fill color here
         scale_y_continuous(name = "Cell Abundance", limits = c(0, 0.6)) +
         scale_x_discrete(name = "Cell Population") +
         theme_bw() +
@@ -625,12 +187,13 @@ if (T) {
 
     p1 <- p + stat_pvalue_manual(stat.test, hide.ns = FALSE, label = "{p}", step.increase = 0.08)
 
+
     pdf(paste0(savePathTemp1, "Pheno-associated Treg tissue distribution.pdf"), width = 4, height = 3)
     print(p1)
     dev.off()
 }
 
-## Plot the location of PD-1+ CD27+ Treg
+## Plot the location of Active Treg
 if (T) {
     sce <- sce[, sce$Tissue == "IM"]
     sce_ <- readRDS(paste0(savePathTemp1, "Treg_recluster.rds"))
@@ -639,23 +202,23 @@ if (T) {
     sce__ <- sce_[, sce_$Treg_Type == "Pheno_pos"]
     sce__ <- sce__[, sce__$Tissue == "IM"]
 
-    sort(table(sce__$ID), decreasing = T)
+    # sort(table(sce__$ID), decreasing = T)
 
     source("./spatial_analysis_functions.r")
 
     PD1TregID <- sce__$CellID
-    sce[, match(PD1TregID, sce$CellID)]$SubType <- "CD27CD279+ Treg"
+    sce[, match(PD1TregID, sce$CellID)]$SubType <- "Active Treg"
 
     ROI_num <- sort(table(sce__$ID), decreasing = T)
     ROIs <- names(ROI_num[ROI_num > 20])
 
-    celltype <- c("CD27CD279+ Treg")
+    celltype <- c("Active Treg")
     for (ROI in ROIs) {
         VisualizeMarkerAndType(sce = sce, ROI = ROI, celltype = celltype, whichType = "SubType", marker = NULL, SavePath = savePathTemp1)
     }
 }
 
-## investigate the spatial interaction of PD-1+ CD27+ Treg
+## investigate the spatial interaction of Active Treg
 if (T) {
     library(SingleCellExperiment)
     library(spatstat)
@@ -671,7 +234,7 @@ if (T) {
     sce_ <- sce_[, sce_$Tissue %in% c("IM", "TAT")]
     sce_ <- sce_[, sce_$Treg_Type %in% c("Pheno_pos")]
 
-    sce[, match(sce_$CellID, sce$CellID)]$SubType <- "PD-1+ CD27+ Treg"
+    sce[, match(sce_$CellID, sce$CellID)]$SubType <- "Active Treg"
     table(sce$SubType)
 
     metaMarkers <- c(
@@ -685,7 +248,7 @@ if (T) {
     ROIs <- names(table(sce$ID))
 
     # Define the whole image size
-    k_NeighborsList <- CalKNNBySpatstat(sce, ROIs = ROIs, CenType = "PD-1+ CD27+ Treg", NeighType = "SubType", k = 10, xlim = c(0, 1000), ylim = c(0, 1000), return.cellID = TRUE)
+    k_NeighborsList <- CalKNNBySpatstat(sce, ROIs = ROIs, CenType = "Active Treg", NeighType = "SubType", k = 10, xlim = c(0, 1000), ylim = c(0, 1000), return.cellID = TRUE)
 
     ## Combine all neighbors
     neighbors <- c()
@@ -745,63 +308,6 @@ if (T) {
         pdf(paste0(savePathTemp1, "CD27+ PD-1+ Treg neighbors abundance.pdf"), width = 10, height = 6)
         print(p)
         dev.off()
-    }
-
-    ## Calcualte the interaction strength
-    if (T) {
-        InterStrenDF <- as.data.frame(matrix(data = NA, nrow = 0, ncol = 3))
-
-        for (ROI in names(k_NeighborsList)) {
-            sceTemp <- sce[, sce$ID == ROI]
-            NeiborTemp <- k_NeighborsList[[ROI]]
-
-            sce_neighborTemp <- sce[, match(NeiborTemp, sce$CellID)]
-            neiborAbunTemp <- as.data.frame(table(sce_neighborTemp$SubType))
-
-            neiborAbunTemp[, 2] <- neiborAbunTemp[, 2] / (length(NeiborTemp) / 10)
-            neiborAbunTemp[, 3] <- rep(ROI, nrow(neiborAbunTemp))
-
-            InterStrenDF <- rbind(InterStrenDF, neiborAbunTemp)
-        }
-
-        colnames(InterStrenDF) <- c("NeighborType", "InteractionStrenth", "ROI")
-        InterStrenDF$Tissue <- colData(sce)[match(InterStrenDF$ROI, sce$ID), "Tissue"]
-
-        ## Visualization
-        if (T) {
-            interstType <- c("Macro_CD163", "Mono_CD11c", "Treg", "NK", "CD8T", "B", "CD4T")
-
-            plotdf <- InterStrenDF[InterStrenDF$NeighborType %in% interstType, ]
-
-            p <- ggplot(plotdf, aes(x = NeighborType, y = InteractionStrenth, fill = Tissue)) +
-                geom_boxplot(alpha = 0.7, color = "black", outlier.shape = NA) +
-                scale_y_continuous(name = "Interaction Strength", limits = c(0, 3.5)) +
-                scale_x_discrete(name = "Neighbor Type") +
-                scale_fill_lancet() +
-                stat_compare_means(aes(group = Tissue),
-                    method = "t.test",
-                    hide.ns = TRUE, # Hide non-significant comparisons
-                    label = "p.signif",
-                    label.y.npc = "top"
-                ) +
-                theme_bw() +
-                theme(
-                    plot.title = element_text(size = 14, face = "bold"),
-                    text = element_text(size = 12),
-                    axis.title = element_text(face = "bold"),
-                    axis.text.x = element_text(size = 11, angle = 90, hjust = 1, vjust = 0.5),
-                    strip.background = element_blank(), # Remove facet grid background
-                    panel.background = element_blank(), # Make the panel background empty
-                    panel.grid.major = element_blank(), # Remove major grid lines
-                    panel.grid.minor = element_blank(), # Remove minor grid lines
-                    panel.border = element_blank() # Remove borders around the facets
-                )
-
-
-            pdf(paste0(savePathTemp1, "CD27+ PD-1+ Treg interaction strength between tissue.pdf"))
-            print(p)
-            dev.off()
-        }
     }
 
     ## Active Treg and Normal Treg neighbors fraction comparison
@@ -982,62 +488,132 @@ if (T) {
     }
 
 
-    ## Are CD27, PD-1 expression of Treg correlated with RFS ? (No)
+    ## Distance between PD-1+ Treg to tumor boundary
     if (F) {
-        sceTreg <- sce[, sce$SubType %in% c("PD-1+ CD27+ Treg", "Treg")]
-        sceTreg <- sceTreg[, sceTreg$Tissue == "IM"]
-        TregExp <- as.data.frame(t(assay(sceTreg)))
+        sce_ <- readRDS(paste0(savePathTemp1, "Treg_recluster.rds"))
+        sce_ <- sce_[, sce_$Tissue == "IM"]
+        head(colData(sce_))
+
+        sceDist <- readRDS("/mnt/data/lyx/IMC/analysis/GradientAna/sce_IM_with_distance2Tumor.rds")
+        head(colData(sceDist))
+
+        colData(sce_)$Dis2Tumor <- sceDist$Dis2Tumor[match(sce_$CellID, sceDist$CellID)]
+
+        df <- as.data.frame(colData(sce_))
+
+        ## plot
+        df_type1 <- df[df$Treg_Type %in% c("Pheno_neg", "Background"), ]
+        df_type1$Treg_Type <- "Normal Treg"
+
+        df_type2 <- df[df$Treg_Type %in% "Pheno_pos", ]
+        df_type2$Treg_Type <- "Active Treg"
+
+        remain_sample <- names(table(df_type2$ID))[table(df_type2$ID) >= 20]
 
 
-        TregExp <- TregExp[, match(c("CD45", "CD4", "FoxP3", metaMarkers), colnames(TregExp))]
-        dim(TregExp)
+        df_type <- rbind(df_type1, df_type2)
+        df_type <- df_type[df_type$ID %in% remain_sample, ]
 
-        p <- quickcor(TregExp, cluster = TRUE, type = "upper", cor.test = TRUE) +
-            geom_colour(data = get_data(type = "upper")) +
-            geom_mark(data = get_data(type = "upper"), size = 2.5, color = "black", fontface = 1) +
-            scale_fill_gradientn(colours = c("#77C034", "white", "#C388FE")) +
-            geom_panel_grid(colour = "white", size = 0.6)
+        df_type <- as.data.frame(df_type)
+        df_type <- df_type[, -c(1, 3)]
 
-        pdf(paste0(savePathTemp1, "Treg marker expression correlation.pdf"), width = 8, height = 8)
-        print(p)
-        dev.off()
+        ## Define distance breaks
+        maxDis <- 1000
+        breaks <- c(0, 50, 100, 200, 300, 500, maxDis)
 
-        TregExp$PID <- sceTreg$PID
 
-        ## Take mean
-        TregExp <- TregExp %>%
-            group_by(PID) %>%
-            summarise(across(c(1:(ncol(TregExp) - 1)), mean, na.rm = TRUE))
+        ## discrete
+        if (F) {
+            df_ranges <- df_type
 
-        MeanDensity <- left_join(TregExp, clinical[, match(c("PID", "RFS_time", "RFS_status"), colnames(clinical))], by = "PID")
+            ### Without zero
+            df_ranges <- df_ranges %>%
+                mutate(distance_range = cut(Dis2Tumor, breaks = breaks)) %>%
+                # First, compute the counts for each combination of ID, distance_range, Treg_Type, and RFS_status
+                group_by(ID, distance_range, Treg_Type) %>%
+                summarise(n = n(), .groups = "drop") %>%
+                # Now, group by ID and Treg_Type to get the total number of cells for each cell type
+                group_by(ID, Treg_Type) %>%
+                mutate(total_cells_cell_type = sum(n), cell_fraction = n / total_cells_cell_type)
 
-        cor(MeanDensity$CD279, MeanDensity$CD27)
+            ### With zero
+            #         df_ranges <- df_ranges %>%
+            #   mutate(distance_range = cut(Dis2Tumor, breaks = breaks)) %>%
+            #   # First, compute the counts for each combination of ID, distance_range, Treg_Type, and RFS_status
+            #   group_by(ID, distance_range, Treg_Type) %>%
+            #   summarise(n = n(), .groups = "drop") %>%
+            #   # Expand dataframe to include missing combinations
+            #   complete(ID, distance_range, Treg_Type, fill = list(n = 0)) %>%
+            #   # Now, group by ID and Treg_Type to get the total number of cells for each cell type
+            #   group_by(ID, Treg_Type) %>%
+            #   mutate(total_cells_cell_type = sum(n), cell_fraction = ifelse(n == 0, 0, n / total_cells_cell_type))
 
-        colnames(MeanDensity)
 
-        cutpoint <- surv_cutpoint(data = MeanDensity, time = "RFS_time", event = "RFS_status", variables = "CD27")
-        cutpoint <- summary(cutpoint)$cutpoint
+            df_ranges <- as.data.frame(df_ranges)
+            df_ranges <- df_ranges[, -c(1)]
 
-        df <- MeanDensity[, c("CD27", "RFS_status", "RFS_time")]
-        df[, 1] <- ifelse(df[, 1] >= cutpoint, "high", "low")
+            plotdf <- df_ranges %>%
+                group_by(Treg_Type, distance_range) %>%
+                summarise(across(c(1:(ncol(df_ranges) - 2)), mean, na.rm = TRUE))
 
-        df$RFS_status <- as.numeric(df$RFS_status)
-        df$RFS_time <- as.numeric(df$RFS_time)
+            plotdf <- as.data.frame(plotdf)
+            plotdf$Treg_Type <- as.factor(plotdf$Treg_Type)
 
-        ## km curve
-        fit <- survfit(Surv(RFS_time, RFS_status) ~ CD27, data = df)
-        p <- ggsurvplot(fit,
-            data = df,
-            linetype = c("solid", "solid"),
-            surv.median.line = "hv", surv.scale = "percent",
-            pval = T, risk.table = T,
-            conf.int = T, conf.int.alpha = 0.1, conf.int.style = "ribbon",
-            risk.table.y.text = T,
-            palette = c("#3300CC", "#CC3300"),
-            xlab = "Recurrence time"
-        )
+            p <- ggplot(plotdf, aes(x = distance_range, y = cell_fraction, group = Treg_Type, color = Treg_Type)) +
+                geom_line(aes(linetype = Treg_Type), size = 1) +
+                geom_point(size = 3) +
+                scale_color_manual(values = ggsci::pal_jco("default")(2)) +
+                labs(
+                    title = "Cell Fraction Change Along Distance Range",
+                    x = "Distance Range",
+                    y = "Cell Fraction",
+                    color = "Treg_Type",
+                    linetype = "Treg_Type"
+                ) +
+                theme_minimal() +
+                theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+                stat_compare_means(aes(group = Treg_Type),
+                    data = df_ranges,
+                    method = "t.test",
+                    hide.ns = FALSE,
+                    label = "p.format"
+                )
+        }
 
-        pdf("KM for Treg CD27.pdf", width = 8, height = 6)
+        ## continuous
+        if (T) {
+            df_stat <- df_type[, c("ID", "Treg_Type", "Dis2Tumor")]
+
+            ## Statistical Testing
+            df_stat <- df_stat %>%
+                group_by(ID, Treg_Type) %>%
+                summarise(across(c(1:(ncol(df_stat) - 2)), mean, na.rm = TRUE))
+
+            wilcox_test_result <- wilcox.test(Dis2Tumor ~ Treg_Type, data = df_stat)
+            p_value <- wilcox_test_result$p.value
+
+            ## Plot figure
+            df_type$Treg_Type <- as.factor(df_type$Treg_Type)
+
+            p <- ggplot(df_type, aes(x = Dis2Tumor, fill = Treg_Type, color = Treg_Type)) +
+                geom_line(stat = "density", size = 1) +
+                scale_color_brewer(palette = "Set1") +
+                labs(x = "Distance to Tumor Boundary", y = "Density") +
+                theme_bw() +
+                theme(
+                    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+                    axis.title.x = element_text(size = 10, face = "bold"),
+                    axis.title.y = element_text(size = 10, face = "bold"),
+                    axis.text = element_text(size = 12),
+                    legend.title = element_text(size = 14, face = "bold"),
+                    legend.text = element_text(size = 12),
+                    legend.position = "right"
+                )
+            ## Add p-value to the plot
+            p <- p + annotate("text", x = Inf, y = Inf, label = sprintf("wilcox test: p-value = %.4e", p_value), hjust = "right", vjust = "top", size = 4, color = "black")
+        }
+
+        pdf(paste0(savePathTemp1, "Density to Tumor/", "Density different between Active Treg and other treg to Tumor Boundary.pdf"), width = 8, height = 6)
         print(p)
         dev.off()
     }
@@ -1046,7 +622,12 @@ if (T) {
 ## Grouping IM ROIs into different abundance group
 if (T) {
     sce
+    sce <- sce[, sce$Tissue %in% "IM"]
+
     structure <- "CNP20"
+
+    TargeType <- "Treg"
+    savePathTemp1 <- paste0(savePath, TargeType, "/")
 
     sce_ <- readRDS(paste0(savePathTemp1, "Treg_recluster.rds"))
     sce_ <- sce_[, sce_$Tissue == "IM"]
@@ -1070,7 +651,7 @@ if (T) {
     ## spatial difference
     ResultPath <- paste0("/mnt/data/lyx/IMC/analysis/spatial/permutation_IM/")
     celltypes <- names(table(sce$SubType))
-    celltypes <- celltypes[-12] ## remove "PD-1+ CD27+ Treg"
+    # celltypes <- celltypes[-12] ## remove "Active Treg"
 
     ### high ROIs
     list_ <- getResult(ResultPath, ROIs = high_ROI, celltypes)
@@ -1088,6 +669,11 @@ if (T) {
         group1 = paste0("Active Treg high"),
         MergeDF2, labelDF2, group2 = paste0("Active Treg low"), plot = "groupheatmap",
         savePath = paste0(savePathTemp1, "Active Treg Interaction Heatmap.pdf")
+    )
+
+    getInteracDiff(ResultPath, sce,
+        celltypes = celltypes, savepath = paste0(savePathTemp1, "Active Treg Interaction Difference between relapse_FC_2.pdf"),
+        do.fdr = FALSE, FC_threshold = 2, IDs1 = high_ROI, IDs2 = low_ROI
     )
 
     ### plot the cell subtype number different
@@ -1110,9 +696,9 @@ if (T) {
     }
 
     #### Multiple cell subpopulations abudnace plot
-    PlotTypes <- c("CD8T", "Macro_HLADR", "Macro_CD11b", "Macro_CD163", "Macro_CD169", "Treg")
+    PlotTypes <- c("CD8T", "Macro_HLADR", "Macro_CD163", "Macro_CD169", "Treg")
     p <- MultipleAbundanceSwarmPlot(HighCountMat1, lowCountMat1, groupsName = c("high", "low"), PlotTypes = PlotTypes, marker = "Acitve Treg", numGroup = 2, style = "box")
-    pdf(paste0(savePathTemp1, "ViolinPlot of multiple celltypes in ", "Acitve Treg", " group.pdf"), height = 10, width = 8)
+    pdf(paste0(savePathTemp1, "ViolinPlot of multiple celltypes in ", "Acitve Treg", " group.pdf"), height = 4.5, width = 8)
     print(p)
     dev.off()
 
@@ -1138,7 +724,7 @@ if (T) {
     }
 }
 
-
+## Neighbors diff between Active Treg and Normal Treg
 if (T) {
     sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
     sce <- sce[, sce$Tissue == "IM"]
@@ -1181,15 +767,12 @@ if (T) {
 
     xCol <- c(1, 19)
     yCol <- 21
-    mat_foldchangeMat <- FCandPvalueCal(mat, xCol = xCol, yCol = yCol, groups = c("Treg", "Acitve Treg"))
+    mat_foldchangeMat <- FCandPvalueCal(mat, xCol = xCol, yCol = yCol, groups = c("Treg", "Acitve Treg"), need.sample = FALSE)
 
-    VolcanoPlot(mat_foldchangeMat, pthreshold = 0.05, fcthreshold = 1.4, feature = NULL, filename = "Volcano of neigobors in PD1+ Treg and Other Treg.pdf")
+    VolcanoPlot(mat_foldchangeMat, pthreshold = 0.05, fcthreshold = 2, feature = NULL, filename = paste0(savePathTemp1, "Volcano of neigobors in Active Treg and Other Treg.pdf"))
 }
 
-## PD-L1+ DC
-## Mono_CD11c analysis - 2
-## Hypothesis: The PD-1+ Mono_CD11c only in IM but not in TAT
-## Mono_CD11c Reclustering
+## Mono_CD11c reclustering analysis
 if (T) {
     TargeType <- "Mono_CD11c"
     savePathTemp1 <- paste0(savePath, TargeType, "/")

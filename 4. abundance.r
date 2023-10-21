@@ -77,10 +77,10 @@ sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
 sce <- sce[, sce$Tissue == "IM"]
 rownames(sce)
 
-# PlotDensityDotplot(sce, marker1 = "CD20", marker2 = "CD3", MajorType = "Lymphocyte", sampleSize = 50000, savePathTemp)
-# PlotDensityDotplot(sce, marker1 = "EpCAM", marker2 = "CD274", MajorType = "Tumor", sampleSize = 50000, savePathTemp)
-# PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD274", MajorType = "Monocyte", sampleSize = 50000, savePathTemp)
-# PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD279", MajorType = "Monocyte", sampleSize = 50000, savePathTemp)
+PlotDensityDotplot(sce, marker1 = "CD20", marker2 = "CD3", MajorType = "Lymphocyte", sampleSize = 1000, savePathTemp)
+PlotDensityDotplot(sce, marker1 = "EpCAM", marker2 = "CD274", MajorType = "Tumor", sampleSize = 10000, savePathTemp)
+PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD274", MajorType = "Monocyte", sampleSize = 10000, savePathTemp)
+PlotDensityDotplot(sce, marker1 = "CD57", marker2 = "CD279", MajorType = "Monocyte", sampleSize = 10000, savePathTemp)
 
 
 ## downstream analysis
@@ -96,70 +96,11 @@ ClassifyCF <- c(
   "Liver_involvement_num", "CEA_5", "CA199_37", "Pathology", "Differential_grade", "Lymph_positive"
 )
 
-## Marker Intensity
-if (F) {
-  markers <- rownames(sce)
-
-  ## take mean
-  list_ <- GetMeanExpressionProfile(sce = sce, LevelCol = "PID", markers = markers, clinicalGroupCol = ClassifyCF[-1])
-  exp <- list_[[1]]
-  clinical <- list_[[2]]
-
-  ## Comapre marker intensity between groups
-  plotdf <- as.data.frame(matrix(data = NA, nrow = ncol(exp) * nrow(exp), ncol = 3))
-  plotdf[, 1] <- rep(colnames(exp), each = nrow(exp))
-  plotdf[, 2] <- rep(rownames(exp), times = ncol(exp))
-  plotdf[, 3] <- as.numeric(as.matrix(exp))
-  for (i in 1:ncol(clinical)) {
-    plotdf <- cbind(plotdf, as.factor(rep(clinical[, i], times = ncol(exp))))
-  }
-
-  colnames(plotdf) <- c("Marker", "PID", "Intensity", colnames(clinical))
-
-  # Reshape the dataframe to the desired long format
-  long_plotdf <- plotdf %>%
-    pivot_longer(
-      cols = 4:ncol(plotdf),
-      names_to = "Feature",
-      values_to = "group"
-    )
-
-  # Display the reshaped dataframe
-  head(long_plotdf)
-
-  p <- ggplot(long_plotdf, aes(x = Feature, y = Intensity, fill = group)) +
-    geom_boxplot(alpha = 0.7, color = "black", outlier.shape = NA) +
-    scale_y_continuous(name = "Cell Abundance") +
-    scale_x_discrete(name = "Cell Population") +
-    scale_fill_manual(values = c("#56B4E9", "#D55E00")) +
-    theme_bw() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-      text = element_text(size = 12),
-      axis.title = element_text(face = "bold"),
-      axis.text.x = element_text(size = 11, angle = 90),
-      legend.position = "none",
-      strip.text = element_text(size = 12, face = "bold"),
-      strip.background = element_blank(),
-      panel.border = element_rect(color = "black", fill = NA, size = 1),
-      panel.grid.major = element_line(color = "gray", size = 0.5),
-      panel.grid.minor = element_blank()
-    ) +
-    stat_compare_means(aes(group = group), label.y = .25, method = "t.test") +
-    facet_wrap(~Marker) +
-    coord_flip()
-
-  pdf(paste0("test.pdf"), width = 24, height = 18)
-  print(p)
-  dev.off()
-}
-
 ## Cell subpopulation counting
 countdf <- Transform_CellCountMat(sceobj = sce, group = c("IM", "CT", "TAT"), clinicalFeatures = ClassifyCF, is.fraction = T)
 colnames(countdf)
 
-## Remove Unknown
-countdf <- countdf[, !(colnames(countdf) %in% "UNKNOWN")]
+countdf <- countdf[, !(colnames(countdf) %in% "UNKNOWN")] ## Remove Unknown
 
 xCol <- c(1, 20)
 clinicalFeatures <- ClassifyCF[-1] ## -1: remove tissue
@@ -169,21 +110,25 @@ for (tissue in c("IM", "CT", "TAT")) {
 }
 
 ## Singletype abundance in multiple clincial groups
-ClassifyCF <- c("Tissue", "RFS_status", "Gender", "Age_60", "KRAS_mutation", "TBS_8", "Differential_grade")
-countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = ClassifyCF, is.fraction = T)
-dim(countdf)
-head(countdf)
-CrossBoxplotForAbundance(countdf, celltype = c("CD4T", "CD8T", "Treg"), TypeName = "T cell", clinicalFeatures = ClassifyCF, savePath = savePath)
-CrossBoxplotForAbundance(countdf, celltype = c("B", "CD4T", "CD8T", "NK"), TypeName = "Lymphocyte", clinicalFeatures = ClassifyCF, savePath = savePath)
-CrossBoxplotForAbundance(countdf, celltype = c("SC_aSMA", "SC_COLLAGEN", "SC_FAP", "SC_Vimentin"), TypeName = "Stromal", clinicalFeatures = ClassifyCF, savePath = savePath)
-CrossBoxplotForAbundance(countdf, celltype = c("Macro_CD163", "Macro_CD11b", "Macro_CD169", "Macro_HLADR"), TypeName = "Macrophage", clinicalFeatures = ClassifyCF, savePath = savePath)
-CrossBoxplotForAbundance(countdf, celltype = c("Macro_CD163", "Macro_CD169", "Treg"), TypeName = "Immune Inhibit", clinicalFeatures = ClassifyCF, savePath = savePath)
+if (T) {
+  ClassifyCF <- c("Tissue", "RFS_status", "Gender", "Age_60", "KRAS_mutation", "TBS_8", "Differential_grade")
+  countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = ClassifyCF, is.fraction = T)
+  dim(countdf)
+  head(countdf)
+  CrossBoxplotForAbundance(countdf, celltype = c("CD4T", "CD8T", "Treg"), TypeName = "T cell", clinicalFeatures = ClassifyCF, savePath = savePath)
+  CrossBoxplotForAbundance(countdf, celltype = c("B", "CD4T", "CD8T", "NK"), TypeName = "Lymphocyte", clinicalFeatures = ClassifyCF, savePath = savePath)
+  CrossBoxplotForAbundance(countdf, celltype = c("SC_aSMA", "SC_COLLAGEN", "SC_FAP", "SC_Vimentin"), TypeName = "Stromal", clinicalFeatures = ClassifyCF, savePath = savePath)
+  CrossBoxplotForAbundance(countdf, celltype = c("Macro_CD163", "Macro_CD11b", "Macro_CD169", "Macro_HLADR"), TypeName = "Macrophage", clinicalFeatures = ClassifyCF, savePath = savePath)
+  CrossBoxplotForAbundance(countdf, celltype = c("Macro_CD163", "Macro_CD169", "Treg"), TypeName = "Immune Inhibit", clinicalFeatures = ClassifyCF, savePath = savePath)
+}
+
 
 ## Abundance Boxplot of relapse
 clinicalFeatures <- c("Tissue", "RFS_status")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
+countdf <- countdf[, !(colnames(countdf) %in% "UNKNOWN")] ## Remove Unknown
 
-# celltypes2Plot <- c("B", "CD4T", "CD8T", "Macro_CD163", "TC_Ki67")
+# celltypes2Plot , "Macro_CD163", "TC_Ki67")
 celltypes2Plot <- colnames(countdf)[xCol[1]:(xCol[2])]
 
 p <- AbundanceBoxPlot(
@@ -194,13 +139,32 @@ pdf("/mnt/data/lyx/IMC/analysis/abundance/relapse_abundance_analysis.pdf", width
 print(p)
 dev.off()
 
+### Abudance boxplot for selecting types
+if (F) {
+  # celltypes2Plot <- c("B", "CD4T", "CD8T", "Macro_CD163")
+  celltypes2Plot <- names(table(sce$SubType))
+
+  savedir <- "Abundance Boxplot/"
+  savePathTemp_ <- paste0("/mnt/data/lyx/IMC/analysis/abundance/", savedir)
+  if (!dir.exists(savePathTemp_)) {
+    dir.create(savePathTemp_, recursive = T)
+  }
+
+  for (i in celltypes2Plot) {
+    p <- AbundanceBoxPlot2(
+      countdf = countdf, celltypes2Plot = i,
+      expCol = xCol, tissueCol = "Tissue", tissue = c("IM", "TAT"), clinicalGroupCol = "RFS_status", ClinicalGroupName = c("Relapse", "NonRelapse")
+    )
+    pdf(paste0(savePathTemp_, "abudance boxplot of ", i, ".pdf"), width = 4, height = 3)
+    print(p)
+    dev.off()
+  }
+  rm(savedir, savePathTemp_)
+}
+
 ## KM curve
 clinicalFeatures <- c("Tissue", "RFS_time", "RFS_status")
 countdf <- Transform_CellCountMat(sce, group = c("IM", "CT", "TAT"), clinicalFeatures = clinicalFeatures, is.fraction = T)
-
-if (F) { ## save countdf for final model construction
-  write.table(countdf, "Subtype Abundance for model construction.csv", sep = ",", row.names = T, col.names = T)
-}
 
 # celltypes2Plot <- c("CD4T", "CD8T", "B", "Macro_CD163", "Macro_CD169", "CD3T")
 celltypes2Plot <- colnames(countdf)[xCol[1]:xCol[2]]
@@ -221,7 +185,7 @@ for (tissue in c("IM", "CT", "TAT")) {
   }
 }
 
-## meta analysis
+## COX
 ContinuousCF <- c(
   "RFS_status", "RFS_time", "fong_score", "Age", "TBS", "CRLM_number", "CRLM_size", "CEA", "CA199", "T_stage"
 )

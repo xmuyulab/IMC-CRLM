@@ -16,12 +16,12 @@ library(ggsci)
 library(RColorBrewer)
 library(viridis)
 library(ggunchained)
+library(ggalluvial)
 
 library(stats)
 library(Rtsne)
 library(FNN)
 library(igraph)
-
 library(dplyr)
 library(tidyr)
 
@@ -126,20 +126,106 @@ GetCelltype2NeighborMat <- function(mat, colname1, colname2) {
 }
 
 
-HeatmapForCelltypeInNeighbor <- function(sce, colname1, colname2, savePath) {
+HeatmapForCelltypeInNeighbor <- function(sce, colname1, colname2, savePath, scale = "column") {
     ## transfer into heatmap matrix
     plotdf <- GetCelltype2NeighborMat(colData(sce), colname1, colname2)
 
     ## heatmap
     color <- colorRampPalette(c("#436eee", "white", "#EE0000"))(100)
     p <- pheatmap(plotdf,
-        color = color, scale = "column",
+        color = color, scale = scale,
         cluster_rows = F, cluster_cols = T,
         # legend_labels = c("Abundance high", "Abundance low"), legend = T,
         show_rownames = T, show_colnames = T
     )
 
     pdf(paste0(savePath, "Cellular Neighbors celltype fraction heatmap.pdf"), width = 8, height = 6)
+    print(p)
+    dev.off()
+    return(NULL)
+}
+
+## comapre and visualize the CNP into tissue
+BarPlotForCelltypeCounts <- function(sce, tissueCol, groupCol, typeCol, savePath) {
+    countdf <- GetAbundance(sceobj = sce, countcol = typeCol, clinicalFeatures = c("ID", tissueCol, groupCol), is.fraction = T)
+
+    plotdf <- pivot_longer(countdf, cols = 1:10, names_to = "CNP", values_to = "Fraction")
+
+    plotdf <- plotdf[, -c(1:2)]
+    plotdf2 <- plotdf %>%
+        group_by(Tissue, RFS_status, CNP) %>%
+        summarise(across(c(1:(ncol(plotdf) - 3)), mean, na.rm = TRUE))
+
+    # Create a list of colors
+    colors <- ggsci::pal_npg("nrc")(10)
+
+    plotdf2 <- as.data.frame(plotdf2)
+
+    plotdf2[, 1] <- as.character(plotdf2[, 1])
+    plotdf2[, 2] <- as.factor(plotdf2[, 2])
+    plotdf2[, 3] <- as.character(plotdf2[, 3])
+    plotdf2[, 4] <- as.numeric(plotdf2[, 4])
+
+    # Create the bar plot
+    p <- ggplot(plotdf2, aes(x = RFS_status, y = Fraction, fill = CNP)) +
+        # Add bars
+        geom_bar(stat = "identity") +
+        # Use different sets of colors for different MajorTypes
+        scale_fill_manual(values = colors) +
+        # Rotate the x-axis labels to make them readable
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+        # Add title and labels
+        labs(
+            title = "Fraction of each CNP by RFS_status and Tissue",
+            x = "RFS Status", y = "Fraction", fill = "CNP"
+        ) +
+        # Separate the plot by Tissue and MajorType
+        facet_grid(~Tissue, scales = "free") +
+        # Hide the borders of the facet grid, make the background of the facet to be empty
+        theme(
+            strip.background = element_blank(),
+            panel.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank()
+        )
+
+    pdf(paste0(savePath, "Abundance Barplot of CNP.pdf"), height = 4, width = 8)
+    print(p)
+    dev.off()
+
+    plotdf <- as.data.frame(plotdf)
+    plotdf[, 2] <- as.factor(plotdf[, 2])
+
+    plotdf <- plotdf[plotdf$Tissue != "TLS", ]
+
+    ## Boxplot
+    p <- ggplot(plotdf, aes(x = CNP, y = Fraction, fill = RFS_status)) +
+        # Add bars
+        geom_boxplot() +
+        # Use different sets of colors for different MajorTypes
+        scale_fill_manual(values = colors) +
+        # Rotate the x-axis labels to make them readable
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+        # Add title and labels
+        labs(
+            title = "Fraction of each CNP by RFS_status and Tissue",
+            x = "CNP", y = "Fraction", fill = "RFS Status"
+        ) +
+        # Separate the plot by Tissue and MajorType
+        facet_grid(~Tissue, scales = "free") +
+        # Hide the borders of the facet grid, make the background of the facet to be empty
+        theme(
+            strip.background = element_blank(),
+            panel.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank()
+        ) +
+        stat_compare_means(aes(group = RFS_status), method = "t.test", hide.ns = T, label = "p.signif")
+
+
+    pdf(paste0(savePath, "Abundance Boxplot of CNP.pdf"), height = 4, width = 8)
     print(p)
     dev.off()
     return(NULL)
@@ -608,7 +694,7 @@ getCoordinate <- function(sce_) {
 }
 
 ## plot celltypes on cell-level
-PlotCelltypes <- function(sce, ROI, TypeCol, SavePath) {
+PlotCNP <- function(sce, ROI, TypeCol, SavePath) {
     sce_ <- sce[, sce$ID == ROI]
 
     coorList <- getCoordinate(sce_)
@@ -706,7 +792,7 @@ SurvivalForPhenoAssCell <- function(plotdf, savePath) {
 
 
 ## calcualte FC
-FCandPvalueCal <- function(mat, xCol, yCol, set.groups = NULL, need.sample = FALSE, sample.size = 2000) {
+FCandPvalueCal <- function(mat, xCol, yCol, groups = NULL, need.sample = FALSE, sample.size = 2000) {
     set.seed(619)
     if (need.sample) {
         if (nrow(mat) > sample.size) {
@@ -714,7 +800,7 @@ FCandPvalueCal <- function(mat, xCol, yCol, set.groups = NULL, need.sample = FAL
             mat <- mat[idx, ]
         }
     }
-    if (is.null(set.groups)) {
+    if (is.null(groups)) {
         groups <- names(table(mat[, yCol]))
         groups <- as.character(sort(groups, decreasing = F))
     }
@@ -1878,4 +1964,49 @@ SpeciNeiDEGAnalysis <- function(sce, IDcol, analysisType, metaMarkers, sample.si
     }
 
     return(ReturnDF)
+}
+
+## 0-1 rescale
+rescale <- function(x, new_range = c(0, 1)) {
+    old_range <- range(x, na.rm = TRUE)
+    x <- (x - old_range[1]) / (old_range[2] - old_range[1]) * diff(new_range) + new_range[1]
+    return(x)
+}
+
+## plot delaunay triangulation network
+plot_network_graph <- function(graph, coords, save_path, sample_fraction = 0.1) {
+    # Get the largest connected component
+    comp <- components(graph)
+    largest_comp <- induced_subgraph(graph, which(comp$membership == which.max(comp$csize)))
+
+    # Sample a subset of vertices from the largest connected component
+    V_sub <- sample(V(largest_comp), size = floor(sample_fraction * vcount(largest_comp)))
+
+    # Extract subgraph
+    sub_graph <- induced_subgraph(largest_comp, vids = V_sub)
+    sub_coords <- coords[as.numeric(names(V_sub)), ]
+
+    # Set the layout for the subgraph
+    layout <- layout_with_fr(sub_graph)
+
+    # Define colors for different SubTypes
+    unique_subtypes <- unique(sub_coords$SubType)
+    color_map <- colorRampPalette(brewer.pal(min(9, length(unique_subtypes)), "Set1"))(length(unique_subtypes))
+    names(color_map) <- unique_subtypes
+    vertex_colors <- color_map[sub_coords$SubType]
+
+    # Plot the subgraph
+    pdf(save_path, height = 12, width = 16)
+
+    plot(sub_graph,
+        layout = layout,
+        vertex.size = 2, # adjust as needed
+        vertex.color = vertex_colors,
+        vertex.label = NA, # no labels
+        edge.color = "grey50",
+        edge.width = 1, # adjust as needed
+        main = "Network Visualization (Subset)"
+    )
+
+    dev.off()
 }

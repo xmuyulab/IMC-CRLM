@@ -470,6 +470,42 @@ AbundanceBoxPlot <- function(sce, countdf, celltypes2Plot, expCol, tissueCol, cl
   return(p)
 }
 
+## Boxplot for some cell subpopulations abudance comparison
+AbundanceBoxPlot2 <- function(countdf, celltypes2Plot, expCol, tissueCol, tissue, clinicalGroupCol, ClinicalGroupName) {
+  ## To long form
+  AbunBoxDF <- pivot_longer(countdf, cols = expCol[1]:expCol[2], values_to = "Abundance", names_to = "Celltype")
+
+  AbunBoxDF[, clinicalGroupCol] <- as.factor(ifelse(AbunBoxDF[, clinicalGroupCol] == 1, ClinicalGroupName[1], ClinicalGroupName[2]))
+  colnames(AbunBoxDF)[match(clinicalGroupCol, colnames(AbunBoxDF))] <- "ClinicalGroup"
+
+  AbunBoxDF <- as.data.frame(AbunBoxDF)
+
+  AbunBoxDF <- AbunBoxDF[AbunBoxDF[, tissueCol] %in% tissue, ]
+  AbunBoxDF <- AbunBoxDF[AbunBoxDF[, "Celltype"] %in% celltypes2Plot, ]
+
+
+  p <- ggplot(AbunBoxDF, aes(x = Tissue, y = Abundance, fill = ClinicalGroup)) +
+    geom_boxplot(alpha = 0.7, color = "black", outlier.shape = NA) +
+    scale_fill_manual(values = ggsci::pal_jco("default")(2))  +
+    facet_wrap(~Celltype, nrow = 2, scales = "free_y") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold"),
+      text = element_text(size = 12),
+      axis.title = element_text(face = "bold", size = 14),
+      axis.text.x = element_text(size = 11, angle = 90, hjust = 1, vjust = 0.5),
+      strip.background = element_blank()
+    )+
+    stat_compare_means(aes(group = ClinicalGroup),
+      method = "t.test",
+      hide.ns = FALSE,
+      label = "p.signif",
+      label.y.npc = "middle"
+    )
+
+  return(p)
+}
+
 ## Convert count matrix into plot dataframe
 CountMat2Plotdf <- function(plotdf, MetaCol, expCol) {
   ### matrix transform
@@ -773,28 +809,6 @@ MergeCountsofROI <- function(countdf, tissue, expCol, scale = F) {
   return(PIDDF)
 }
 
-## Stack barplot to show the celltype fraction
-BarPlotForCelltypeFraction <- function(countDF, xCol, rowSep, colSep, savePath) {
-  Cellcounts <- countDF[, xCol[1]:xCol[2]]
-
-  celltypes <- rep(colnames(Cellcounts), each = nrow(Cellcounts))
-  rois <- rep(rownames(Cellcounts), times = ncol(Cellcounts))
-  counts <- as.numeric(as.matrix(Cellcounts))
-  tissues <- rep(countDF[, rowSep], times = ncol(Cellcounts))
-  groups <- rep(countDF[, colSep], times = ncol(Cellcounts))
-
-  plotdf <- cbind(counts, celltypes, rois, tissues, groups)
-  plotdf <- as.data.frame(plotdf)
-  colnames(plotdf) <- c("Counts", "Celltype", "ROI", "Tissue", "Relapse")
-
-  p <- ggplot(plotdf, aes(x = ROI, weight = mean, fill = Celltype)) +
-    geom_hline(yintercept = seq(25, 100, 25), color = "gray") +
-    geom_bar(color = "black", width = .7, position = "stack") +
-    labs(y = "Relative abundance (%)") +
-    scale_fill_brewer(palette = "Set3") +
-    scale_y_continuous(expand = c(0, 0)) +
-    theme_classic()
-}
 
 ## Stack barplot to show the celltype fraction
 BarPlotForCelltypeFraction <- function(sce, rowSep, colSep, savePath) {

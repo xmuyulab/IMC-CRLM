@@ -5,6 +5,7 @@ library(survminer)
 
 library(pheatmap)
 library(ggrepel)
+library(ggalluvial)
 
 library(dplyr)
 library(tidyverse)
@@ -21,29 +22,47 @@ tissues <- c("IM", "CT", "TAT")
 
 NeigoborDomain <- c("CNP5", "CNP10", "CNP15", "CNP20", "CNP25", "CNP30")
 
-## Bind CNPs
-scimapResult <- read.csv(paste0("/mnt/data/lyx/IMC/analysis/structure/cellular_neighbor_", "All", ".csv"))
-scimapResult <- scimapResult[, -1]
-
-sce <- BindResult(sce, scimapResult, NeigoborDomain)
-
-## Plot the CNP contribution
-
-for (structure in NeigoborDomain) {
-    savePath2 <- paste0(savePath, structure, "/")
-    if (!dir.exists(savePath2)) {
-        dir.create(savePath2, recursive = T)
-    }
-
-    ## Cell subtype fraction in cellular neighbors pattern
-    HeatmapForCelltypeInNeighbor(sce, "SubType", structure, savePath2)
-
-    ## Compare the CNP between tissue
-    BarPlotForCelltypeCounts(sce = sce, tissueCol = "Tissue", groupCol = "RFS_status", typeCol = structure, savePath = savePath2)
-}
-
 k <- 10
 
+## All cells
+if (T) {
+    ## Bind CNPs
+    scimapResult <- read.csv(paste0("/mnt/data/lyx/IMC/analysis/structure/cellular_neighbor_", "All", ".csv"))
+    scimapResult <- scimapResult[, -1]
+
+    sce <- BindResult(sce, scimapResult, NeigoborDomain)
+
+    ## Plot the CNP contribution
+    sce <- sce[, sce$Tissue %in% tissues]
+
+    for (structure in NeigoborDomain) {
+        savePath2 <- paste0(savePath, structure, "/")
+        if (!dir.exists(savePath2)) {
+            dir.create(savePath2, recursive = T)
+        }
+
+        ## Cell subtype fraction in cellular neighbors pattern
+        HeatmapForCelltypeInNeighbor(sce, "SubType", structure, savePath2)
+
+        ## Compare the CNP between tissue
+        BarPlotForCelltypeCounts(sce = sce, tissueCol = "Tissue", groupCol = "RFS_status", typeCol = structure, savePath = savePath2)
+
+
+        ## Celllular neighborhood pattern survival analysis
+        CNP_countsDF <- GetAbundance(sce, countcol = structure, clinicalFeatures = c("RFS_status", "RFS_time"), is.fraction = TRUE, is.reuturnMeans = T)
+        CNPs <- names(table(colData(sce)[, structure]))
+        if (!dir.exists(paste0(savePath2, "KM/"))) {
+            dir.create(paste0(savePath2, "KM/"), recursive = T)
+        }
+        for (CNP in CNPs) {
+            plotdf <- CNP_countsDF[, c(CNP, "RFS_status", "RFS_time")]
+            KMForCNP(plotdf, CNP, savePath = paste0(savePath2, "KM/", "Cellular Neighborhood pattern Suvival analysis of ", CNP, ".pdf"))
+        }
+    }
+}
+
+
+## Seperate Tissue
 for (tissue in tissues) {
     ## Select tissue
     sce_ <- sce[, sce$Tissue == tissue]
@@ -67,10 +86,10 @@ for (tissue in tissues) {
         }
 
         ## Cell subtype fraction in cellular neighbors pattern
-        # HeatmapForCelltypeInNeighbor(sce_, "SubType", structure, savePath3)
+        HeatmapForCelltypeInNeighbor(sce_, "SubType", structure, savePath3)
 
         ## Cellular pattern difference in whole ROI between Relaps and Non-Relaps
-        # CompareCellularPattern(sce_, sep = "RFS_status", countcol = structure, n_cluster = 10, clinicalFeatures = NULL, savePath = savePath3)
+        CompareCellularPattern(sce_, sep = "RFS_status", countcol = structure, n_cluster = 10, clinicalFeatures = NULL, savePath = savePath3)
 
         ## Celllular neighborhood pattern survival analysis
         CNP_countsDF <- GetAbundance(sce_, countcol = structure, clinicalFeatures = c("RFS_status", "RFS_time"), is.fraction = TRUE, is.reuturnMeans = T)
@@ -81,6 +100,41 @@ for (tissue in tissues) {
         for (CNP in CNPs) {
             plotdf <- CNP_countsDF[, c(CNP, "RFS_status", "RFS_time")]
             KMForCNP(plotdf, CNP, savePath = paste0(savePath3, "KM/", "Cellular Neighborhood pattern Suvival analysis of ", CNP, ".pdf"))
+        }
+
+        ## Sankey diagram to display the cells flow
+        if (T) {
+            interstingType <- c("B", "CD4T", "CD8T", "NK", "Treg", "Macro_CD11b", "Macro_CD163", "Macro_CD169", "Macro_HLADR", "Mono_CD11c")
+
+            df <- as.data.frame(colData(sce_))
+            df <- df[, c("SubType", structure, "RFS_status")]
+            colnames(df) <- c("SubType", "CNP", "RFS_status")
+
+            df$RFS_status <- factor(df$RFS_status, levels = c(1, 0), labels = c("Recurrence", "No Recurrence"))
+            df <- df[df[, 1] %in% interstingType, ]
+
+            ## sampling
+            set.seed(619)
+            sampleidx <- sample.int(nrow(df), size = 5000)
+            dfplot <- df[sampleidx, ]
+
+            my_color <- c()
+            my_color <- c(my_color, pal_igv("default")(length(table(dfplot[, 1]))))
+            my_color <- c(my_color, pal_jco("default")(length(table(dfplot[, 2]))))
+            my_color <- c(my_color, pal_nejm("default")(length(table(dfplot[, 3]))))
+
+            p <- ggplot(data = dfplot, aes(axis1 = SubType, axis2 = CNP, axis3 = RFS_status)) +
+                geom_alluvium(aes(fill = RFS_status)) +
+                geom_stratum(aes(fill = after_stat(stratum))) +
+                geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 2, color = "black") +
+                scale_x_discrete(limits = c("SubType", "CNP", "RFS_status"), expand = c(0.15, 0.05)) +
+                scale_fill_manual(values = my_color) +
+                theme_void() +
+                theme(legend.position = "none")
+
+            pdf(paste0(savePath3, "Sankey of celltype_CNP_RFS in ", structure, ".pdf"), height = 8, width = 6)
+            print(p)
+            dev.off()
         }
 
         ## Cellular pattern difference in certain central type between relapse and non relapse
@@ -170,23 +224,28 @@ for (tissue in tissues) {
         if (F) {
             clinicalFeatures <- c(NULL)
             CNP_countsDF <- GetAbundance(sce_, countcol = structure, clinicalFeatures = clinicalFeatures, is.fraction = T, is.reuturnMeans = T)
-            write.table(CNP_countsDF, "CNP Abundance for model construction.csv", sep = ",", row.names = T, col.names = T)
+            write.table(CNP_countsDF, paste0(structure, " Abundance in ", tissue, " for model construction.csv"), sep = ",", row.names = T, col.names = T)
         }
 
         ## Plot CNP on image
-        if (F) {
-            SavePath1 <- paste0(savePath3, "CNP_oncells/")
-            if (!dir.exists(SavePath1)) {
-                dir.create(SavePath1, recursive = T)
+        if (T) {
+            SavePath4 <- paste0(savePath3, "CNP_oncells/")
+            if (!dir.exists(SavePath4)) {
+                dir.create(SavePath4, recursive = T)
             }
             colData(sce)[, structure] <- as.factor(colData(sce)[, structure])
 
             ROIs <- names(table(colData(sce)$ID))
             for (ROI in ROIs) {
-                PlotCelltypes(sce, ROI, TypeCol = structure, SavePath = paste0(SavePath1, ROI, "_"))
+                PlotCNP(sce, ROI, TypeCol = structure, SavePath = paste0(SavePath4, ROI, "_"))
             }
         }
     }
+}
+
+## Manuuly selecting structure to analysis
+if (F) {
+
 }
 
 ## TME archetype analysis
@@ -221,7 +280,6 @@ if (F) {
     annotationCol$`TME Archetypes` <- as.factor(as.numeric(TMEClusterID))
     annotationCol$RFSS <- ifelse(GroupInfo$RFS_status == 1, "Relaps", "Non-Relaps")
     annotationCol$`KRAS Mutation` <- ifelse(GroupInfo$KRAS_mutation == 1, "Mutate", "WT")
-    # annotationCol$`CRC Site` <- ifelse(GroupInfo$CRC_site == 1, "Right Colon", ifelse(GroupInfo$CRC_site == 2, "Left Colon", "Rectum"))
 
     p <- pheatmap(plotDF,
         scale = "column", gaps_row = length(selectCelltypes), cutree_cols = k,
@@ -281,3 +339,6 @@ if (F) {
         PlotCelltypes(sce, ROI, selectCelltypes, SavePath = paste0(savePath, ROI, " TME archetypes.pdf"))
     }
 }
+
+CNP_countsDF <- CNP_countsDF[order(CNP_countsDF$CNP_2, decreasing = T), ]
+head(CNP_countsDF)

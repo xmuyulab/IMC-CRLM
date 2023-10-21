@@ -2,6 +2,9 @@
 library(ggplot2)
 library(SingleCellExperiment)
 
+library(dplyr)
+library(tidyr)
+
 ## Convert to adjacency matrix
 Convert2AdjMat <- function(edges) {
     # Create a dataframe of edges and their lengths
@@ -163,15 +166,6 @@ PreprocessingVolcan <- function(mat, nameCol, FC_threshold = 1.4, Qvalue_thresho
     return(returnList)
 }
 
-## Get the cell subpopulation abundance fraction from certain tissue
-GetFractionFromTissue <- function(df, tissue, subtype) {
-    df2 <- subset(df, Tissue == tissue)
-    df2 <- df2[, match(c("PID", subtype), colnames(df2))]
-    colnames(df2)[2] <- paste0(tissue, "_", subtype)
-
-    return(df2)
-}
-
 ## Calcualte the x and y from a position vector
 GetXandY <- function(posVec) {
     xVec <- c()
@@ -249,7 +243,7 @@ get_nearest_points <- function(df, targetType, n = 10) {
 }
 
 ## Determine the distance to certain border
-Dis2Boundary <- function(sce_, targetType, targetTypeCol, imageIDcol = "ID", coorCol = "Position", DisColName = "Dis2Tumor", k = 10) {
+Dis2Boundary <- function(sce_, targetType, targetTypeCol, imageIDcol = "ID", cellIDcol = "CellID", coorCol = "Position", DisColName = "Dis2Tumor", k = 10) {
     colData(sce_)[, DisColName] <- 0
 
     ## Get images ID
@@ -261,9 +255,9 @@ Dis2Boundary <- function(sce_, targetType, targetTypeCol, imageIDcol = "ID", coo
         ## Calculate each cell distance to boundary
         coorTemp <- GetXandY(colData(sceTemp)[, coorCol])
         coorTemp <- cbind(coorTemp, Type = colData(sceTemp)[, targetTypeCol])
-        
+
         disValue <- get_nearest_points(df = coorTemp, targetType = targetType, n = k)
-        colData(sce_)[match(colData(sceTemp)[, imageIDcol], colData(sce_)[, imageIDcol]), ] <- disValue
+        colData(sce_)[match(colData(sceTemp)[, cellIDcol], colData(sce_)[, cellIDcol]), DisColName] <- disValue
     }
 
     return(sce_)

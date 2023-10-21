@@ -1,18 +1,22 @@
 ## functions for permutation test in R
 library(pheatmap)
 library(ComplexHeatmap)
+library(ggDoubleHeat)
 library(RColorBrewer)
 library(ggplot2)
-library(SingleCellExperiment)
-library(survival)
-library(rtiff)
-library(tiff)
-library(ggDoubleHeat)
-library(grid)
-library(magick)
 library(ggpubr)
 library(ggprism)
+library(grid)
 library(patchwork)
+
+library(SingleCellExperiment)
+library(survival)
+library(forcats)
+
+library(rtiff)
+library(tiff)
+library(magick)
+
 source("./structural_analysis_functions.r")
 
 ### Make groupInfo file
@@ -181,7 +185,6 @@ BubblePlot <- function(MergeDF, LabelDF, savePath) {
 
 # DoubleHeat function to create spatial aggregation cell interaction data
 SingleHeatmap <- function(data1, label1, savePath) {
-
     # Multiply the data frames element-wise
     df1 <- data1 * label1
 
@@ -194,7 +197,7 @@ SingleHeatmap <- function(data1, label1, savePath) {
     # Check the specified plot type and create the corresponding plot
     p <- pheatmap(
         df1,
-        scale = 'none', 
+        scale = "none",
         cellwidth = 16, cellheight = 12,
         cluster_row = F, cluster_col = F,
         angle_col = "90",
@@ -283,6 +286,15 @@ LoadAnalysisResult <- function(IDs1, celltypes, sce) {
         colnames(csvTemp) <- rownames(csvTemp)
         csvTemp <- as.matrix(csvTemp)
 
+        ## load mask dataframe
+        maskfilepathTemp <- paste0(ResultPath, ID, "/ClosePvalue/ClosePvalue.csv")
+        maskTemp <- read.csv(maskfilepathTemp)
+        maskTemp <- maskTemp[, -1]
+        maskTemp <- as.matrix(maskTemp)
+
+        maskTemp <- ifelse(maskTemp <= 0.05, 1, 0)
+        csvTemp <- csvTemp * maskTemp
+
         ## sort the interaction number
         if (nrow(csvTemp) != numtypes) {
             TempMat <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
@@ -300,20 +312,23 @@ LoadAnalysisResult <- function(IDs1, celltypes, sce) {
         }
 
         ## calculate the cell number of certain cell types
-        cellnumMat <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
-        rownames(cellnumMat) <- celltypes
-        colnames(cellnumMat) <- celltypes
+        cellnumMat1 <- matrix(data = 0, nrow = numtypes, ncol = numtypes)
+        rownames(cellnumMat1) <- celltypes
+        colnames(cellnumMat1) <- celltypes
 
-        for (j in 1:ncol(cellnumMat)) {
-            c1 <- colnames(cellnumMat)[j]
-            c1num <- ncol(sceTemp[, sceTemp$SubType == c1])
-            cellnumMat[, j] <- cellnumMat[, j] + c1num
+        cellnumMat2 <- cellnumMat1
+
+        for (j in 1:ncol(cellnumMat1)) {
+            c1 <- colnames(cellnumMat1)[j]
+            c1num <- ncol(sceTemp[, sceTemp$Cell_Subtype == c1])
+            cellnumMat1[, j] <- cellnumMat1[, j] + c1num
         }
-        for (j in 1:nrow(cellnumMat)) {
-            c2 <- rownames(cellnumMat)[j]
-            c2num <- ncol(sceTemp[, sceTemp$SubType == c2])
-            cellnumMat[j, ] <- cellnumMat[j, ] + c2num
+        for (j in 1:nrow(cellnumMat2)) {
+            c2 <- rownames(cellnumMat2)[j]
+            c2num <- ncol(sceTemp[, sceTemp$Cell_Subtype == c2])
+            cellnumMat2[j, ] <- cellnumMat2[j, ] + c2num
         }
+        cellnumMat <- sqrt(cellnumMat1 ** 2 + cellnumMat2 ** 2) 
 
         TempMat <- ifelse(cellnumMat == 0, 0, round(TempMat / cellnumMat, 6))
 
@@ -377,7 +392,7 @@ TestDiff <- function(array1, array2, celltypes, savepath, do.fdr = TRUE, FC_thre
         HeatmapForDiff(qvalueMat, MaskMat, FoldChangeMat, Sig = Sig, savepath)
     } else {
         PvalueMat <- -log10(PvalueMat)
-        FoldChangeMat <- ifelse(FoldChangeMat ==0, 0, log2(FoldChangeMat))
+        FoldChangeMat <- ifelse(FoldChangeMat == 0, 0, log2(FoldChangeMat))
         FoldChangeMat <- ifelse(abs(FoldChangeMat) < log2(FC_threshold), 0, FoldChangeMat)
 
         if (returnMat) {
@@ -480,7 +495,7 @@ HeatmapForDiff <- function(PvalueMat, MaskMat, FoldChangeMat, Sig = 0.05, savepa
     return(NULL)
 }
 
-getInteracDiff <- function(ResultPath, sce, GroupInfo = NULL, groups, celltypes, savepath, do.fdr = TRUE, FC_threshold = 1.5, IDs1 = NULL, IDs2 = NULL, Sig = 0.05) {
+getInteracDiff <- function(ResultPath, sce, GroupInfo = NULL, groups = NULL, celltypes, savepath, do.fdr = TRUE, FC_threshold = 1.5, IDs1 = NULL, IDs2 = NULL, Sig = 0.05) {
     if (is.null(IDs1)) {
         IDs1 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[1], ])
         IDs2 <- rownames(GroupInfo[GroupInfo$RFS_status == groups[2], ])
@@ -738,7 +753,7 @@ InterDiffStackplot <- function(ResultPath, sce, GroupInfo = NULL, groupCol, grou
             panel.grid.minor = element_blank()
         )
     # Add the p-value label above the middle of the line
-    ymax = 0.4
+    ymax <- 0.4
     p <- p +
         stat_compare_means(aes(group = ClinicalGroup),
             method = "t.test",
@@ -888,8 +903,8 @@ PlotMarker <- function(sce, ROI, Marker, SavePath) {
     plotdf["y"] <- coorList[[2]]
     plotdf["Expression"] <- value
 
-custom_color_scale <- colorRampPalette(c("lightgrey", "red"), alpha = TRUE)(10)
-custom_color_scale <- alpha(custom_color_scale, ifelse(seq(0.0, 1, length.out = 10) < 0.4, 0.3, 1))
+    custom_color_scale <- colorRampPalette(c("lightgrey", "red"), alpha = TRUE)(10)
+    custom_color_scale <- alpha(custom_color_scale, ifelse(seq(0.0, 1, length.out = 10) < 0.4, 0.3, 1))
 
     p <- ggplot(plotdf, aes(x = x, y = y, color = Expression)) +
         geom_point(size = 1) +
@@ -911,22 +926,20 @@ PlotCelltypes <- function(sce, ROI, selectCelltypes, whichType = "SubType", Save
 
     coorList <- getCoordinate(sce_)
 
-    celltypes <- colData(sce_)[,whichType]
+    celltypes <- colData(sce_)[, whichType]
     celltypes <- ifelse(celltypes %in% selectCelltypes, celltypes, "Background")
-    celltypes <- as.factor(celltypes)
 
-    idx <- match("Background", levels(celltypes))
-    levels(celltypes) <- c("Background", levels(celltypes)[-idx])
+    celltypes <- fct_relevel(celltypes, "Background") # move 'Background' to first
+
+    myPalette <- brewer.pal(length(levels(celltypes)) - 1, "Dark2")
+    myPalette <- c("grey", myPalette)
+    myPalette <- alpha(myPalette, ifelse(myPalette == "grey", 0.5, 1))
 
     plotdf <- as.data.frame(matrix(data = NA, nrow = length(celltypes), ncol = 4))
     colnames(plotdf) <- c("x", "y", "Identity", "value")
     plotdf["x"] <- coorList[[1]]
     plotdf["y"] <- coorList[[2]]
     plotdf["Identity"] <- celltypes
-
-    myPalette <- brewer.pal(length(selectCelltypes), "Dark2")
-    myPalette <- c("grey", myPalette)
-    myPalette <- alpha(myPalette, ifelse(myPalette == "grey", 0.5, 1))
 
     p <- ggplot(plotdf, aes(x = x, y = y, color = Identity)) +
         geom_point(size = 1) +
@@ -1155,11 +1168,11 @@ VisTypeMaskChannel <- function(sce, ROI, celltypes, whichType = "Subtype", chann
     }
 
     MaskMat <- LoadCellMask(maskPath, ROI)
-    #ChannelArray <- LoadChannelImage(channelPath, ROI, channel)
-    PlotCelltypes(sce, ROI, celltypes, whichType = whichType, paste0(SavePath, celltypes," in ",whichType, " on cell level.pdf"))
+    # ChannelArray <- LoadChannelImage(channelPath, ROI, channel)
+    PlotCelltypes(sce, ROI, celltypes, whichType = whichType, paste0(SavePath, celltypes, " in ", whichType, " on cell level.pdf"))
 
     png::writePNG(MaskMat, paste0(SavePath, "CellMask.png"), dpi = 100)
-    #png::writePNG(ChannelArray, paste0(SavePath, channel[1], "-", channel[2], "_channel.png"), dpi = 100)
+    # png::writePNG(ChannelArray, paste0(SavePath, channel[1], "-", channel[2], "_channel.png"), dpi = 100)
     cat(ROI, ": CellMask, celltypes and channel image were done!", "\n")
     return(NULL)
 }
@@ -1194,20 +1207,20 @@ VisTypeonMask <- function(sce_, ROI, celltypes2plot, channels2plot, CellMaskPath
 }
 
 ## Visualize the CA-9 expression value and Tumor cells on ROI
-VisualizeMarkerAndType <- function(sce, ROI, celltype, whichType = "Subtype", marker, SavePath){
+VisualizeMarkerAndType <- function(sce, ROI, celltype, whichType = "Subtype", marker, SavePath) {
     SavePath <- paste0(SavePath, ROI, "/")
     if (!dir.exists(SavePath)) {
         dir.create(SavePath)
     }
 
-    celltypesname <- paste(celltype,collapse = "-")
+    celltypesname <- paste(celltype, collapse = "-")
     ## Plot type
-    PlotCelltypes(sce = sce, ROI = ROI, selectCelltypes = celltype, whichType = whichType, SavePath  = paste0(SavePath, celltypesname, " in ", whichType, " on cell level.pdf"))
-    
+    PlotCelltypes(sce = sce, ROI = ROI, selectCelltypes = celltype, whichType = whichType, SavePath = paste0(SavePath, celltypesname, " in ", whichType, " on cell level.pdf"))
+
     ## Plot marker
-    if(!is.null(marker)){
-        PlotMarker(sce = sce, ROI = ROI,Marker = marker,SavePath  = paste0(SavePath, marker, " of ", celltypesname, " on cell level.pdf"))
+    if (!is.null(marker)) {
+        PlotMarker(sce = sce, ROI = ROI, Marker = marker, SavePath = paste0(SavePath, marker, " of ", celltypesname, " on cell level.pdf"))
     }
-    cat(paste0(ROI, " is plot done!"))
+    cat(paste0(ROI, " is plot done!"), "\n")
     return(NULL)
 }

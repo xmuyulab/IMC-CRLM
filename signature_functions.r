@@ -171,7 +171,7 @@ FitLassoCox <- function(list_, savePath) {
     y <- list_[["y_train"]]
 
     x <- as.matrix(x)
-    y <- Surv(y[,1],y[,2])
+    y <- Surv(y[, 1], y[, 2])
 
     ## max-normalization
     ## maxium C-index
@@ -194,7 +194,7 @@ FitLassoCox <- function(list_, savePath) {
 
     # Compute predicted risk scores using the best lambda value
     risk_scores <- predict(cindex_lamda_set, newx = x, s = best_lambda, type = "link")
-    c_index <- 1-(rcorr.cens(risk_scores,y)[[1]])
+    c_index <- 1 - (rcorr.cens(risk_scores, y)[[1]])
     model[["cindex"]] <- c_index
 
     model[["active_features"]] <- weightname[weights != 0]
@@ -386,7 +386,7 @@ KMplot <- function(clinical, label, set, savePath, plot = T) {
     logrank_pvalue <- 1 - pchisq(logrank_pvalue$chisq, length(logrank_pvalue$n) - 1)
 
     # Calculate the concordance index (C-index)
-    c_index <- 1-(rcorr.cens(label,Surv(clinical[, 1],clinical[, 2]))[[1]])
+    c_index <- 1 - (rcorr.cens(label, Surv(clinical[, 1], clinical[, 2]))[[1]])
     c_index <- round(digits = 3, c_index)
 
     if (plot) {
@@ -575,7 +575,7 @@ RatioCorPlot <- function(RatioMat2, expCol, clinicalGroupCol, ClinicalGroupName,
 }
 
 ## Compare signatures via multi-variable cox
-MultipleUniCOX <- function(df) {
+MultipleUniCOX <- function(df, UniCOX = TRUE) {
     result <- matrix(data = NA, nrow = 0, ncol = 6)
     result <- as.data.frame(result)
 
@@ -589,44 +589,65 @@ MultipleUniCOX <- function(df) {
     features <- colnames(df)[1:(ncol(df) - 2)]
     cat("The features in multi-cox are: ", features, "\n")
 
-    features <- features[-(match(c("RFS_time", "RFS_status"), features))]
+    # features <- features[-(match(c("RFS_time", "RFS_status"), features))]
 
-    univ_formulas <- sapply(
-        features,
-        function(x) {
-            as.formula(paste0("Surv(RFS_time, RFS_status)~", x))
-        }
-    )
-
-    univ_models <- lapply(univ_formulas, function(x) {
-        coxph(x, data = df)
-    })
-
-    univ_results <- lapply(univ_models, function(x) {
-        ftest <- cox.zph(x)
-        ftest
-        mul_cox1_result <- summary(x)
-        multi1 <- round(mul_cox1_result$conf.int[, c(1, 3, 4)], 4)
-        multi1 <- as.data.frame(t(multi1))
-
-        multi2 <- ShowRegTable(
-            x,
-            exp = TRUE,
-            digits = 2, pDigits = 3,
-            printToggle = TRUE, quote = FALSE, ciFun = confint
+    if (UniCOX) {
+        univ_formulas <- sapply(
+            features,
+            function(x) {
+                as.formula(paste0("Surv(RFS_time, RFS_status)~", x))
+            }
         )
 
-        result <- cbind(multi1, multi2)
-        result <- cbind(Features = rownames(result), result)
+        univ_models <- lapply(univ_formulas, function(x) {
+            coxph(x, data = df)
+        })
+
+        univ_results <- lapply(univ_models, function(x) {
+            ftest <- cox.zph(x)
+            ftest
+            mul_cox1_result <- summary(x)
+            multi1 <- round(mul_cox1_result$conf.int[, c(1, 3, 4)], 4)
+            multi1 <- as.data.frame(t(multi1))
+
+            multi2 <- ShowRegTable(
+                x,
+                exp = TRUE,
+                digits = 2, pDigits = 3,
+                printToggle = TRUE, quote = FALSE, ciFun = confint
+            )
+
+            result <- cbind(multi1, multi2)
+            result <- cbind(Features = rownames(result), result)
+
+            return(result)
+        })
+
+        for (x in univ_results) {
+            result <- rbind(result, x)
+        }
 
         return(result)
-    })
+    } else {
+        formula_ <- paste0("Surv(RFS_time, RFS_status)~", features[1])
+        for (i in 2:length(features)) {
+            formula_ <- paste0(formula_, "+", features[i])
+        }
+        mul_cox <- coxph(as.formula(formula_), data = df)
+        mul_cox1 <- summary(mul_cox)
 
-    for (x in univ_results) {
-        result <- rbind(result, x)
+        multi1 <- as.data.frame(round(mul_cox1$conf.int[, c(1, 3, 4)], 2))
+        multi2 <- ShowRegTable(mul_cox,
+            exp = TRUE,
+            digits = 2,
+            pDigits = 3,
+            printToggle = TRUE,
+            quote = FALSE,
+            ciFun = confint
+        )
+        result <- cbind(Features = rownames(multi2), multi1, multi2)
+        return(result)
     }
-
-    return(result)
 }
 
 CompareSig <- function(mul_cox) {
@@ -660,7 +681,87 @@ LollipopForMultiFeatures <- function(pcoxDF) {
         ggtheme = theme_classic()
     ) +
         ylab("C-index") + xlab("Clinical Features") +
-    coord_flip()
+        coord_flip()
 
     return(p)
+}
+
+## Get the cell subpopulation abundance fraction from certain tissue
+GetFractionFromTissue <- function(df, tissue, subtype) {
+    df2 <- subset(df, Tissue == tissue)
+    df2 <- df2[, match(c("PID", subtype), colnames(df2))]
+    colnames(df2)[2] <- paste0(tissue, "_", subtype)
+
+    return(df2)
+}
+
+## forest plot to visualize the cox results
+ForestPlot <- function(multicox_result, savePath) {
+    ## Definate space
+    ins <- function(x) {
+        c(as.character(x), rep(NA, ncol(multicox_result) - 1))
+    }
+    numfeatures <- nrow(multicox_result)
+
+    result_df <- rbind(
+        c("Features", NA, NA, NA, "HR(95%CI)", "p-value"),
+        ins("Clnical Features"),
+        multicox_result[c(1:numfeatures), ],
+        c(NA, NA, NA, NA, NA, NA)
+    )
+
+    ## hight-light rows
+    is_summary_vector <- c()
+    for (i in 1:nrow(result_df)) {
+        if (is.na(result_df[i, 2])) {
+            is_summary_vector <- c(is_summary_vector, TRUE)
+        } else {
+            is_summary_vector <- c(is_summary_vector, FALSE)
+        }
+    }
+
+    ## forestplot
+    p <- forestplot(result_df[, c(1, 5, 6)],
+        mean = as.numeric(result_df[, 2]),
+        lower = as.numeric(result_df[, 3]),
+        upper = as.numeric(result_df[, 4]),
+        zero = 1,
+        boxsize = 0.6,
+        graph.pos = "right",
+        hrzl_lines = list(
+            "1" = gpar(lty = 1, lwd = 2),
+            "2" = gpar(lty = 2) # ,
+            # "21" = gpar(lwd = 2, lty = 1, columns = c(1:4))
+        ),
+        graphwidth = unit(.25, "npc"),
+        xlab = "HR(exp(coef))",
+        xticks = c(0.4, 1, 3, 5, 7, 10),
+        is.summary = is_summary_vector,
+        txt_gp = fpTxtGp(
+            label = gpar(cex = 1),
+            ticks = gpar(cex = 1),
+            xlab = gpar(cex = 1.5),
+            title = gpar(cex = 2)
+        ),
+        lwd.zero = 1,
+        lwd.ci = 1.5,
+        lwd.xaxis = 2,
+        lty.ci = 1.5,
+        ci.vertices = T,
+        ci.vertices.height = 0.2,
+        clip = c(0.1, 8),
+        ineheight = unit(8, "mm"),
+        line.margin = unit(8, "mm"),
+        colgap = unit(6, "mm"),
+        fn.ci_norm = "fpDrawDiamondCI",
+        col = fpColors(
+            box = "#021eaa",
+            lines = "#021eaa",
+            zero = "black"
+        )
+    )
+
+    pdf(savePath, width = 8, height = 6)
+    print(p)
+    dev.off()
 }
