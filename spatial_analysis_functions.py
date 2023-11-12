@@ -3,9 +3,8 @@ import os
 import numpy as np
 import pandas as pd
 from anndata import AnnData
-from sklearn.metrics.pairwise import euclidean_distances
+from sklearn.neighbors import NearestNeighbors
 from collections import Counter
-from random import shuffle
 
 def MergeClinical(expPath, clinicalPath, qcPath, metacolStart):
     # load data
@@ -88,35 +87,34 @@ def GetDistance(adata):
     return disMat
 
 ### calculate neighbors, distance less than threshold
-def GetNeighbors(disMat,dis_threshold):
-    disMat2 = np.where(disMat<=dis_threshold,1,0)
-    disMat2 = np.triu(disMat2) - np.eye(disMat2.shape[0])
-    disMat2 = disMat2.astype(np.int0)
+def GetNeighbors(adata, dis_threshold):
+    x = adata.obs["x"]
+    y = adata.obs["y"]
+    coordinates = np.array([x, y], dtype=np.float32).T
 
-    cell1 = []
-    cell2 = []
+    # Use NearestNeighbors to find neighbors within dis_threshold
+    nbrs = NearestNeighbors(radius=dis_threshold,
+                            algorithm='auto').fit(coordinates)
+    indices = nbrs.radius_neighbors(coordinates, return_distance=False)
 
-    nrow = disMat2.shape[0]
-    ncol = disMat2.shape[1]
+    cell1_list = []
+    cell2_list = []
 
-    for i in range(nrow):
-        a = disMat2[i,:]
+    for i, neighbors in enumerate(indices):
+        for j in neighbors:
+            if i < j:  # This ensures that we only get each pair once
+                cell1_list.append(i)
+                cell2_list.append(j)
 
-        cell1Temp = [i for _ in range(a.sum())]
-        cell1.extend(cell1Temp)
-
-        for j in range(i+1,ncol):
-            if a[j] == 1:
-                cell2.append(j)
-    
-    neiMat = pd.DataFrame()
-    neiMat["cell1"] = cell1
-    neiMat["cell2"] = cell2
+    neiMat = pd.DataFrame({
+        "cell1": cell1_list,
+        "cell2": cell2_list
+    })
 
     return neiMat
 
-def Permutation(neiMat,celllabel,perm_n=1001):
-    ### permutation
+def Permutation(neiMat, celllabel, perm_n=1001):
+    # permutation
     alllabel = [x for x in Counter(celllabel).keys()]
     numlabel = len(alllabel)
     numPair = neiMat.shape[0]
@@ -129,30 +127,28 @@ def Permutation(neiMat,celllabel,perm_n=1001):
         if i == 0:
             permuLabel = celllabel.copy()
         else:
-            shuffle(permuLabel)
+            permuLabela = np.array(permuLabel)
+            np.random.shuffle(permuLabela)
 
-        if (i % 100 == 0):
-            print("Perform permutation test: "+str(i))
-
-        interactNumMat = np.zeros(shape=(numlabel,numlabel)).astype(np.int0)
+        interactNumMat = np.zeros(shape=(numlabel, numlabel)).astype(np.int0)
         interactNumMat = pd.DataFrame(interactNumMat)
         interactNumMat.columns = alllabel
         interactNumMat.index = alllabel
 
         cell1Temp = [permuLabel[x] for x in neiMat["cell1"]]
         cell2Temp = [permuLabel[x] for x in neiMat["cell2"]]
-        
-        pairTemp = [cell1Temp[a]+'__'+cell2Temp[a] for a in range(numPair)]
+
+        pairTemp = [cell1Temp[a] + '__' + cell2Temp[a] for a in range(numPair)]
         pairCount = Counter(pairTemp)
 
         for j in pairCount.keys():
-            c1,c2 = j.split("__")
-            interactNumMat.loc[c1,c2] += pairCount[j]
+            c1, c2 = j.split("__")
+            interactNumMat.loc[c1, c2] += pairCount[j]
 
-        diag_ = np.tril(interactNumMat)-np.tril(interactNumMat,-1)
+        diag_ = np.tril(interactNumMat) - np.tril(interactNumMat, -1)
         interactNumMat_ = interactNumMat + np.transpose(interactNumMat) - diag_
 
-        PermutationResut["permutation"+str(i)] = interactNumMat_
+        PermutationResut["permutation" + str(i)] = interactNumMat_
 
     return PermutationResut
 
