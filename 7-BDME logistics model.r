@@ -251,7 +251,7 @@ if (T) {
   }
 }
 
-## Logistic regression
+## Logistic regression for BD neighbors
 if (T) {
   MeanDensity <- read.csv("/mnt/data/lyx/IMC/analysis/signature/EpCAM cell neighbors density in TAT for model construction.csv")
 
@@ -338,6 +338,45 @@ if (T) {
   dev.off()
 }
 
+## AUC for other clinical fetures
+if (T) {
+  library(pROC)
+  library(SingleCellExperiment)
+
+  clinical <- read.csv("/home/lenislin/Experiment/data/CRLM_IMC/clinical.csv")
+  sce <- readRDS("/home/lenislin/Experiment/data/CRLM_IMC/allsce.rds")
+  sce <- sce[,sce$Tissue == "TAT"]
+  PIDs <- names(table(sce$PID))
+
+  clinical <- clinical[match(PIDs, clinical$PID), ]
+  head(clinical)
+
+  featuresList <- c("fong_score", "TBS","CRLM_size", "CEA", "CA199","T_stage")
+
+  savePath <- "/home/lenislin/Experiment/data/CRLM_IMC/results/AUC of other features/"
+
+  if(!dir.exists(savePath)){
+    dir.create(savePath,recursive = T)
+  }
+  for (feature_ in featuresList) {
+    # actual outcomes to numeric
+    actual_outcomes <- as.numeric(clinical$RFS_status)
+
+    # feature vector
+    prob_predictions <- as.numeric(clinical[,feature_])
+
+    # Compute the ROC curve
+    roc_obj <- roc(actual_outcomes, prob_predictions)
+
+    # Print the AUC
+    print(auc(roc_obj))
+
+    pdf(paste0(savePath,"AUC of ",feature_,".pdf"), width = 8, height = 6)
+    plot(roc_obj, main = paste0(feature_), col = "blue", lwd = 4, print.auc = TRUE, auc.polygon = TRUE, grid = TRUE, grid.col = "darkgray", grid.lwd = 1.5, auc.polygon.col = "skyblue")
+    dev.off()
+  }
+}
+
 ## visualize some EpCAM cell structure in ROI
 if (T) {
   source("./spatial_analysis_functions.r")
@@ -391,39 +430,38 @@ if (T) {
 }
 
 ## Heatmap for tow classes bile duct environment
-if(T){
+if (T) {
   library(pheatmap)
 
-df <- InterDF[, match(c("PID", "RFS_time", "RFS_status", "B", "CD4T", "SC_FAP", "Macro_CD163", "SC_COLLAGEN"), colnames(InterDF))]
+  df <- InterDF[, match(c("PID", "RFS_time", "RFS_status", "B", "CD4T", "SC_FAP", "Macro_CD163", "SC_COLLAGEN"), colnames(InterDF))]
 
-y <- df[, 1:3]
+  y <- df[, 1:3]
 
-x <- df[, 4:ncol(df)]
-# x <- apply(x,MARGIN = 1, function(a){return(scale(as.numeric(a)))})
-# x <- t(x)
+  x <- df[, 4:ncol(df)]
+  # x <- apply(x,MARGIN = 1, function(a){return(scale(as.numeric(a)))})
+  # x <- t(x)
 
-d <- dist(x, method = "manhattan")
-cl <- hclust(d, method = 'ward.D')
-groups <- cutree(cl, k = 5)
-y$Label <- unname(groups)
-table(y$RFS_status, y$Label)
+  d <- dist(x, method = "manhattan")
+  cl <- hclust(d, method = "ward.D")
+  groups <- cutree(cl, k = 5)
+  y$Label <- unname(groups)
+  table(y$RFS_status, y$Label)
 
-RowAnno <- y[, c(3:4)]
-RowAnno[,1] <- as.factor(RowAnno[,1])
-RowAnno[,2] <- as.factor(RowAnno[,2])
+  RowAnno <- y[, c(3:4)]
+  RowAnno[, 1] <- as.factor(RowAnno[, 1])
+  RowAnno[, 2] <- as.factor(RowAnno[, 2])
 
-plotdf <- t(x)
+  plotdf <- t(x)
 
-plotdf <- plotdf[,match(rownames(RowAnno[order(RowAnno$Label),]),colnames(plotdf))]
+  plotdf <- plotdf[, match(rownames(RowAnno[order(RowAnno$Label), ]), colnames(plotdf))]
 
-p <- pheatmap(plotdf,
-  cluster_rows = F, cluster_cols = F, scale = "column",
-  clustering_distance_cols = "manhattan",clustering_method = "ward.D",
-  annotation_col = RowAnno
-)
+  p <- pheatmap(plotdf,
+    cluster_rows = F, cluster_cols = F, scale = "column",
+    clustering_distance_cols = "manhattan", clustering_method = "ward.D",
+    annotation_col = RowAnno
+  )
 
-pdf("test.pdf", width = 15, height = 2)
-print(p)
-dev.off()
+  pdf("test.pdf", width = 15, height = 2)
+  print(p)
+  dev.off()
 }
-

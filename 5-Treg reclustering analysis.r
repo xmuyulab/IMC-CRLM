@@ -521,65 +521,6 @@ if (T) {
         maxDis <- 1000
         breaks <- c(0, 50, 100, 200, 300, 500, maxDis)
 
-
-        ## discrete
-        if (F) {
-            df_ranges <- df_type
-
-            ### Without zero
-            df_ranges <- df_ranges %>%
-                mutate(distance_range = cut(Dis2Tumor, breaks = breaks)) %>%
-                # First, compute the counts for each combination of ID, distance_range, Treg_Type, and RFS_status
-                group_by(ID, distance_range, Treg_Type) %>%
-                summarise(n = n(), .groups = "drop") %>%
-                # Now, group by ID and Treg_Type to get the total number of cells for each cell type
-                group_by(ID, Treg_Type) %>%
-                mutate(total_cells_cell_type = sum(n), cell_fraction = n / total_cells_cell_type)
-
-            ### With zero
-            #         df_ranges <- df_ranges %>%
-            #   mutate(distance_range = cut(Dis2Tumor, breaks = breaks)) %>%
-            #   # First, compute the counts for each combination of ID, distance_range, Treg_Type, and RFS_status
-            #   group_by(ID, distance_range, Treg_Type) %>%
-            #   summarise(n = n(), .groups = "drop") %>%
-            #   # Expand dataframe to include missing combinations
-            #   complete(ID, distance_range, Treg_Type, fill = list(n = 0)) %>%
-            #   # Now, group by ID and Treg_Type to get the total number of cells for each cell type
-            #   group_by(ID, Treg_Type) %>%
-            #   mutate(total_cells_cell_type = sum(n), cell_fraction = ifelse(n == 0, 0, n / total_cells_cell_type))
-
-
-            df_ranges <- as.data.frame(df_ranges)
-            df_ranges <- df_ranges[, -c(1)]
-
-            plotdf <- df_ranges %>%
-                group_by(Treg_Type, distance_range) %>%
-                summarise(across(c(1:(ncol(df_ranges) - 2)), mean, na.rm = TRUE))
-
-            plotdf <- as.data.frame(plotdf)
-            plotdf$Treg_Type <- as.factor(plotdf$Treg_Type)
-
-            p <- ggplot(plotdf, aes(x = distance_range, y = cell_fraction, group = Treg_Type, color = Treg_Type)) +
-                geom_line(aes(linetype = Treg_Type), size = 1) +
-                geom_point(size = 3) +
-                scale_color_manual(values = ggsci::pal_jco("default")(2)) +
-                labs(
-                    title = "Cell Fraction Change Along Distance Range",
-                    x = "Distance Range",
-                    y = "Cell Fraction",
-                    color = "Treg_Type",
-                    linetype = "Treg_Type"
-                ) +
-                theme_minimal() +
-                theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-                stat_compare_means(aes(group = Treg_Type),
-                    data = df_ranges,
-                    method = "t.test",
-                    hide.ns = FALSE,
-                    label = "p.format"
-                )
-        }
-
         ## continuous
         if (T) {
             df_stat <- df_type[, c("ID", "Treg_Type", "Dis2Tumor")]
@@ -1241,53 +1182,6 @@ if (T) {
             print(p1)
             dev.off()
         }
-    }
-
-
-    ## Are CD27, PD-1 expression of Mono_CD11c correlated with RFS ? (No)
-    if (F) {
-        sceMono_CD11c <- sce[, sce$SubType %in% c("PD-L1+ Mono_CD11c", "Mono_CD11c")]
-        sceMono_CD11c <- sceMono_CD11c[, sceMono_CD11c$Tissue == "IM"]
-        Mono_CD11cExp <- as.data.frame(t(assay(sceMono_CD11c)))
-
-        Mono_CD11cExp <- Mono_CD11cExp[, match(c("CD11c", metaMarkers, noimmuneMarkers), colnames(Mono_CD11cExp))]
-        dim(Mono_CD11cExp)
-
-        Mono_CD11cExp$PID <- sceMono_CD11c$PID
-
-        ## Take mean
-        Mono_CD11cExp <- Mono_CD11cExp %>%
-            group_by(PID) %>%
-            summarise(across(c(1:(ncol(Mono_CD11cExp) - 1)), mean, na.rm = TRUE))
-
-        MeanDensity <- left_join(Mono_CD11cExp, clinical[, match(c("PID", "RFS_time", "RFS_status"), colnames(clinical))], by = "PID")
-
-        colnames(MeanDensity)
-        cutpoint <- surv_cutpoint(data = MeanDensity, time = "RFS_time", event = "RFS_status", variables = "CD274")
-        cutpoint <- summary(cutpoint)$cutpoint
-
-        df <- MeanDensity[, c("CD274", "RFS_status", "RFS_time")]
-        df[, 1] <- ifelse(df[, 1] >= cutpoint, "high", "low")
-
-        df$RFS_status <- as.numeric(df$RFS_status)
-        df$RFS_time <- as.numeric(df$RFS_time)
-
-        ## km curve
-        fit <- survfit(Surv(RFS_time, RFS_status) ~ CD274, data = df)
-        p <- ggsurvplot(fit,
-            data = df,
-            linetype = c("solid", "solid"),
-            surv.median.line = "hv", surv.scale = "percent",
-            pval = T, risk.table = T,
-            conf.int = T, conf.int.alpha = 0.1, conf.int.style = "ribbon",
-            risk.table.y.text = T,
-            palette = c("#3300CC", "#CC3300"),
-            xlab = "Recurrence time"
-        )
-
-        pdf("KM for Mono_CD11c CD274.pdf", width = 8, height = 6)
-        print(p)
-        dev.off()
     }
 }
 

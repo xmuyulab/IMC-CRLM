@@ -20,10 +20,11 @@ source("./spatial_analysis_functions.r")
 source("./structural_analysis_functions.r")
 
 ## load TAT sce object
-sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
+basePath <- "/home/lenislin/Experiment/projectsResult/IMC-CRC/"
+sce <- readRDS(paste0(basePath,"allsce.rds"))
 sce <- sce[, sce$Tissue %in% c("TAT", "IM", "CT")]
 
-savePath <- "/mnt/data/lyx/IMC/analysis/NewStructure/"
+savePath <- paste0(basePath,"NewStructure/")
 
 
 metaMarkers <- c(
@@ -54,14 +55,6 @@ if (F) {
     sce2 <- sce_
     sce2$SubType <- sce2$MajorType
     MajorDF <- HeatmapForMarkersInGroups(sce = sce2, markers = metaMarkers, groupCol = "RFS_status", adjust.p = T, FCthreshold = 0, savePath = NULL, return.mat = T, sample.size = 1.5e4)
-
-    ## Lymphocytes
-    # Intertypes <- c("B", "CD4T", "CD8T", "NK", "Treg","Macro_CD163","Macro_CD169","Mono_CD11c")
-
-    # sce2 <- sce_
-    # sce2 <- sce2[, sce2$SubType %in% Intertypes]
-
-    # LymphoDF <- HeatmapForMarkersInGroups(sce = sce2, markers = c(metaMarkers,immuneMarkers), groupCol = "RFS_status", adjust.p = T, FCthreshold = 0, savePath = NULL, return.mat = T, sample.size = 1e4)
 
     ## Merge
     dfTemp <- rbind(allDF, MajorDF)
@@ -130,10 +123,10 @@ if (F) {
 }
 
 ## EpCAM+ cells structure detect
-sce <- readRDS("/mnt/data/lyx/IMC/analysis/allsce.rds")
+sce <- readRDS(paste0(basePath,"allsce.rds"))
 sce <- sce[, sce$Tissue == "TAT"]
 
-savePath <- "/mnt/data/lyx/IMC/analysis/NewStructure/"
+savePath <- paste0(basePath,"NewStructure_2/")
 
 ROIs <- names(table(sce$ID))
 
@@ -188,33 +181,21 @@ for (type in c("Inhibit", "Immune")) {
     # Convert the delaunay object to an edge dataframe
     edges <- with(delaunay$delsgs, data.frame(from = ind1, to = ind2, length = sqrt((x1 - x2)^2 + (y1 - y2)^2)))
 
-    # Remove the distance larger than threshold
-    d_threshold <- 20
-    edges <- edges[edges$length <= d_threshold, ]
+    # Keep only the edges from the given cell type (A) to other specified cell types
+    edges <- edges[
+    (filtered_coords$SubType[edges$from] == centralTypes & filtered_coords$SubType[edges$to] %in% NeighborTypes) |
+    (filtered_coords$SubType[edges$to] == centralTypes & filtered_coords$SubType[edges$from] %in% NeighborTypes), 
+  ]
 
-    # Filter out vertices that are not in the edge list
-    filtered_coords <- filtered_coords[unique(c(edges$from, edges$to)), ]
+    # # Remove the distance larger than threshold
+    # d_threshold <- 20
+    # edges <- edges[edges$length <= d_threshold, ]
+
+    # # Filter out vertices that are not in the edge list
+    # filtered_coords <- filtered_coords[unique(c(edges$from, edges$to)), ]
 
     # Create a graph object using igraph package
     g <- graph_from_data_frame(edges, directed = FALSE)
-
-    ## igraph clustering
-    if (F) {
-      # Perform Walktrap community detection
-      communities <- walktrap.community(g)
-
-      # Get membership vector (cluster assignments)
-      membership <- communities$membership
-    }
-
-    ## Louvain clustering
-    if (F) {
-      # Compute the Louvain communities
-      communities <- cluster_louvain(g, resolution = 0.2)
-
-      # Get membership vector (cluster assignments)
-      membership <- communities$membership
-    }
 
     ## Just extreact connected subgraph
     if (T) {
@@ -225,27 +206,19 @@ for (type in c("Inhibit", "Immune")) {
       membership <- comp$membership
     }
 
-    ## DBSCAN clustering
-    if (F) {
-      # Run DBSCAN on the distance matrix
-      # eps and MinPts need to be chosen based on your data
-      dist_matrix <- get.adjacency(g, sparse = FALSE)
-      dbscan_result <- dbscan::dbscan(dist_matrix, eps = 20, minPts = 2)
-
-      # Get membership vector (cluster assignments), note that noise points are assigned to cluster 0
-      membership <- dbscan_result$cluster
-    }
-
     # Calculate cluster sizes
     cluster_sizes <- table(membership)
 
     # Add cluster results back to the data
-    filtered_coords$cluster <- membership
+    cellids <- filtered_coords[names(membership),"CellID"]
 
-    # Identify clusters without the central type
-    clusters_with_central_type <- unique(filtered_coords$cluster[filtered_coords$SubType %in% centralTypes])
-    clusters_without_central_type <- setdiff(unique(filtered_coords$cluster), clusters_with_central_type)
-    filtered_coords$cluster[filtered_coords$cluster %in% clusters_without_central_type] <- NA
+    filtered_coords$cluster <- NA
+    filtered_coords[names(membership),]$cluster <- membership
+
+    # # Identify clusters without the central type
+    # clusters_with_central_type <- unique(filtered_coords$cluster[filtered_coords$SubType %in% centralTypes])
+    # clusters_without_central_type <- setdiff(unique(filtered_coords$cluster), clusters_with_central_type)
+    # filtered_coords$cluster[filtered_coords$cluster %in% clusters_without_central_type] <- NA
 
     # Calculate type count within each cluster
     type_count <- table(filtered_coords$cluster, filtered_coords$SubType)
@@ -324,7 +297,7 @@ for (type in c("Inhibit", "Immune")) {
 }
 
 # Inhibit
-if (F) {
+if (T) {
   sce <- readRDS(paste0(savePath, "TAT_sce_with_Inhibit_stucture.rds"))
 
   ## Investigate the marker expression and cluster size
@@ -335,9 +308,9 @@ if (F) {
   log2clustersize <- log2(sce_$cluster_size + 1)
 
   # Define breaks
-  breaks <- c(0, 2, 3, 4, 5, 6, 8, ceiling(max(log2clustersize)))
+  breaks <- c(0, 1, 2, 3, 4, 5, 6, 7, ceiling(max(log2clustersize)))
   # Cut the vector into intervals
-  vec_cut <- cut(log2clustersize, breaks = breaks, include.lowest = T, right = F)
+  vec_cut <- cut(log2clustersize, breaks = breaks, include.lowest = F, right = T)
   vec_group_labels <- as.character(vec_cut)
 
   markers <- metaMarkers
@@ -350,6 +323,8 @@ if (F) {
     TC_Marker <- cbind(t(value), vec_group_labels)
     TC_Marker <- as.data.frame(TC_Marker)
     colnames(TC_Marker) <- c("marker", "log2ClusterSize")
+
+    TC_Marker <- na.omit(TC_Marker)
 
     ## downsample
     set.seed(1)
@@ -371,7 +346,7 @@ if (F) {
 }
 
 # Immune
-if (F) {
+if (T) {
   sce <- readRDS(paste0(savePath, "TAT_sce_with_Immune_stucture.rds"))
   savePath_ <- paste0(savePath, "Immune/")
 
@@ -381,7 +356,7 @@ if (F) {
   log2clustersize <- log2(sce_$cluster_size + 1)
 
   # Define breaks
-  breaks <- c(0, 2, 3, 4, 5, 6, 8, ceiling(max(log2clustersize)))
+  breaks <- c(0, 1, 2, 3, 4, 5, 6, 7, ceiling(max(log2clustersize)))
   # Cut the vector into intervals
   vec_cut <- cut(log2clustersize, breaks = breaks, include.lowest = T, right = F)
   vec_group_labels <- as.character(vec_cut)
@@ -401,6 +376,8 @@ if (F) {
     TC_Marker <- TC_Marker[sample.int(nrow(TC_Marker), size = 5000), ]
     TC_Marker[, 1] <- as.numeric(TC_Marker[, 1])
 
+    TC_Marker <- na.omit(TC_Marker)
+
     p <- ggplot(TC_Marker, aes(x = log2ClusterSize, y = marker)) +
       geom_boxplot(fill = "darkgreen") +
       theme_bw() +
@@ -416,9 +393,9 @@ if (F) {
 }
 
 ## Compare inhibit and immune
-if (F) {
-  inhibitSCE <- readRDS("/mnt/data/lyx/IMC/analysis/NewStructure/TAT_sce_with_Inhibit_stucture.rds")
-  immuneSCE <- readRDS("/mnt/data/lyx/IMC/analysis/NewStructure/TAT_sce_with_Immune_stucture.rds")
+if (T) {
+  inhibitSCE <- readRDS(paste0(basePath,"NewStructure_2/TAT_sce_with_Inhibit_stucture.rds"))
+  immuneSCE <- readRDS(paste0(basePath,"NewStructure_2/TAT_sce_with_Immune_stucture.rds"))
 
   inhibitSCE <- inhibitSCE[, inhibitSCE$SubType %in% centralTypes]
   immuneSCE <- immuneSCE[, immuneSCE$SubType %in% centralTypes]
@@ -433,27 +410,33 @@ if (F) {
   test <- as.data.frame(colData(sce_)[, c("PID", "RFS_time", "RFS_status", "Inhibit_cluster_size", "Inhibit_InterestypeDensity", "Immune_cluster_size", "Immune_InterestypeDensity")])
   head(test)
 
+  test$Label <- (test$Inhibit_InterestypeDensity) / (test$Immune_InterestypeDensity)
+
+  test <- na.omit(test)
+  test[is.infinite(test$Label),"Label"] <- max(test[!is.infinite(test$Label),"Label"])
+
   test2 <- test %>%
     group_by(PID) %>%
     summarise(across(c(1:(ncol(test) - 1)), mean, na.rm = TRUE))
 
   df <- as.data.frame(test2)
-  df$TestLabel <- df$Inhibit_cluster_size / df$Immune_cluster_size
-  df <- df[,c(1,2,3,8)]
-  df <- df[order(df$TestLabel,decreasing = T),]
-  
-  cutpoint <- surv_cutpoint(data = df, time = "RFS_time", event = "RFS_status", variables = "TestLabel")
+  df$TestLabel <- df$Label
+
+  df_ <- df[, c("RFS_time","RFS_status","TestLabel")]
+  df_ <- df_[order(df_$TestLabel, decreasing = T), ]
+
+  cutpoint <- surv_cutpoint(data = df_, time = "RFS_time", event = "RFS_status", variables = "TestLabel")
   cutpoint <- summary(cutpoint)$cutpoint
 
-  df$Label <- ifelse(df$TestLabel > cutpoint, 1, 0)
+  df_$Label <- ifelse(df_$TestLabel > cutpoint, 1, 0)
 
-  df$RFS_status <- as.numeric(df$RFS_status)
-  df$RFS_time <- as.numeric(df$RFS_time)
+  df_$RFS_status <- as.numeric(df_$RFS_status)
+  df_$RFS_time <- as.numeric(df_$RFS_time)
 
   ## km curve
-  fit <- survfit(Surv(RFS_time, RFS_status) ~ Label, data = df)
+  fit <- survfit(Surv(RFS_time, RFS_status) ~ Label, data = df_)
   p <- ggsurvplot(fit,
-    data = df,
+    data = df_,
     linetype = c("solid", "solid"),
     surv.median.line = "hv", surv.scale = "percent",
     pval = T, risk.table = T,
@@ -463,53 +446,7 @@ if (F) {
     xlab = "Recurrence time"
   )
 
-  pdf(paste0(savePath_, "KM for Label (Patient).pdf"), width = 8, height = 6)
-  print(p)
-  dev.off()
-
-  test2$Diff <- test2$Inhibit_cluster_size - test2$Immune_cluster_size
-  test2 <- test2[order(test2$Diff), ]
-}
-
-  ## Using the mean size of cluster to survival analysis
-if (T) {
-  DF <- as.data.frame(colData(sce_)[, match(c("PID", "RFS_time", "RFS_status"), colnames(colData(sce_)))])
-  DF$log2clustersize <- log2clustersize
-
-  MeanDF <- DF %>%
-    group_by(PID) %>%
-    summarise(across(c(1:(ncol(DF) - 1)), mean, na.rm = TRUE))
-
-  MeanDF <- as.data.frame(MeanDF[order(MeanDF$log2clustersize,decreasing = T),])
-
-  ## KM
-  if (F) {
-    write.table(DF, "EpCAM cell neighbors density in TAT for model construction.csv", sep = ",", row.names = T, col.names = T)
-  }
-
-  cutpoint <- surv_cutpoint(data = MeanDF, time = "RFS_time", event = "RFS_status", variables = "log2clustersize")
-  cutpoint <- summary(cutpoint)$cutpoint
-
-  df <- MeanDF[, c("log2clustersize", "RFS_status", "RFS_time")]
-  df[, 1] <- ifelse(df[, 1] > cutpoint, "high", "low")
-
-  df$RFS_status <- as.numeric(df$RFS_status)
-  df$RFS_time <- as.numeric(df$RFS_time)
-
-  ## km curve
-  fit <- survfit(Surv(RFS_time, RFS_status) ~ log2clustersize, data = df)
-  p <- ggsurvplot(fit,
-    data = df,
-    linetype = c("solid", "solid"),
-    surv.median.line = "hv", surv.scale = "percent",
-    pval = T, risk.table = T,
-    conf.int = T, conf.int.alpha = 0.1, conf.int.style = "ribbon",
-    risk.table.y.text = T,
-    palette = c("#3300CC", "#CC3300"),
-    xlab = "Recurrence time"
-  )
-
-  pdf(paste0(savePath_, "KM for log2clustersize (Patient).pdf"), width = 8, height = 6)
+  pdf(paste0(savePath, "KM for BDME Label (Patient).pdf"), width = 8, height = 6)
   print(p)
   dev.off()
 }

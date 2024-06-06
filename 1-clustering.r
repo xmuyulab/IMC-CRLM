@@ -1,12 +1,10 @@
-# clustering
-
+# Clustering and Data Normalization for Biomedical Research
+# Loading necessary libraries
 library(SingleCellExperiment)
-
 library(dplyr)
 library(stringr)
 library(reshape2)
 library(parallel)
-
 library(pheatmap)
 library(ComplexHeatmap)
 library(ggplot2)
@@ -16,46 +14,46 @@ library(cowplot)
 library(RColorBrewer)
 library(ggsci)
 
+# Source custom functions
 source("/home/lyx/project/IMC/clustering_functions.r")
 source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
 
-## Loading protein expression matrix and meta data
+# Load protein expression matrix and meta data
 raw_csv_dir <- "/mnt/data/lyx/IMC/IMCell_Output/denoise_result"
 meta_csv_dir <- "/mnt/data/lyx/IMC/IMC_CRC_QC.csv"
-
 total.res2.qc <- load_RawData(raw_csv_dir, meta_csv_dir)
-print(dim(total.res2.qc))
-total.res2.qcBack <- total.res2.qc
+print(dim(total.res2.qc))  # Print dimensions of the loaded data
+total.res2.qcBack <- total.res2.qc  # Backup of the original data
 
-## Load Marker
+# Load marker data
 panel <- read.csv("/mnt/data/lyx/IMC/IMC_CRC_panel_v2.csv", stringsAsFactors = FALSE)
 MarkerList <- load_Marker(panel)
 
-## data normalization
+# Data normalization
 savePath <- "/mnt/data/lyx/IMC/analysis/clustering/"
-
 colnames(total.res2.qc)[which(colnames(total.res2.qc) == "sample")] <- "filelist"
 
-total.res2.qc.norm <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = FALSE, is.Batch = F, norm_method = "0-1")
-total.res2.qc.norm.asin <- normData(total.res2.qc, marker_total = (MarkerList[["All_Marker"]]), censor_val = 0.99, arcsinh = TRUE, is.Batch = F, norm_method = "0-1")
+# Normalization without arcsinh transformation
+total.res2.qc.norm <- normData(total.res2.qc, marker_total = MarkerList[["All_Marker"]], 
+                               censor_val = 0.99, arcsinh = FALSE, is.Batch = FALSE, norm_method = "0-1")
+# Normalization with arcsinh transformation
+total.res2.qc.norm.asin <- normData(total.res2.qc, marker_total = MarkerList[["All_Marker"]], 
+                                    censor_val = 0.99, arcsinh = TRUE, is.Batch = FALSE, norm_method = "0-1")
 
+# Save normalized data
 saveRDS(total.res2.qc, paste0(savePath, "total.res2.qc.rds"))
 saveRDS(total.res2.qc.norm, paste0(savePath, "total.res2.qc.norm.rds"))
 saveRDS(total.res2.qc.norm.asin, paste0(savePath, "total.res2.qc.norm.asin.rds"))
 
-
-## Two-run clustering
-savePath <- "/mnt/data/lyx/IMC/analysis/clustering/"
-
+# Two-run clustering
 total.res2.qc <- readRDS(paste0(savePath, "total.res2.qc.rds"))
 total.res2.qc.norm <- readRDS(paste0(savePath, "total.res2.qc.norm.rds"))
 total.res2.qc.norm.asin <- readRDS(paste0(savePath, "total.res2.qc.norm.asin.rds"))
 
-dim(total.res2.qc.norm)
-colnames(total.res2.qc.norm)
+dim(total.res2.qc.norm)  # Print dimensions of normalized data
+colnames(total.res2.qc.norm)  # Print column names of normalized data
 
-## Major clustering
-## Load Marker
+# Major clustering
 panel <- read.csv("/mnt/data/lyx/IMC/IMC_CRC_panel_v2.csv", stringsAsFactors = FALSE)
 MarkerList <- load_Marker(panel)
 

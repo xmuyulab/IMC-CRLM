@@ -812,8 +812,8 @@ FCandPvalueCal <- function(mat, xCol, yCol, groups = NULL, need.sample = FALSE, 
     returnMat <- matrix(data = NA, nrow = 0, ncol = 3)
     returnMat <- as.data.frame(returnMat)
 
-    group1mat <- mat[which(mat[, yCol] == groups[1]), ]
-    group2mat <- mat[which(mat[, yCol] == groups[2]), ]
+    group1mat <- mat[mat[, yCol] %in% groups[1], ]
+    group2mat <- mat[mat[, yCol] %in% groups[2], ]
 
     for (i in xCol[1]:xCol[2]) {
         typeTemp <- colnames(mat)[i]

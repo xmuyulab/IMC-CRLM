@@ -13,7 +13,9 @@ qcPath = "/mnt/data/lyx/IMC/IMC_CRC_QC.csv"
 
 adata = MergeClinical(expPath, clinicalPath, qcPath, 35)
 
-for tissue in ["All"]: ## ,"IM","CT","TAT"
+adata = sc.read_h5ad("/mnt/data/lyx/IMC/analysis/spatial/adata.h5ad")
+
+for tissue in ["All","IM","CT","TAT"]:
     if tissue == "All":
         adata_ = adata
     else:
@@ -24,6 +26,8 @@ for tissue in ["All"]: ## ,"IM","CT","TAT"
         adata_ = sm.tl.spatial_count(adata_, x_coordinate='x', y_coordinate='y',
                                     phenotype='SubType', method='knn',knn=n_neighbors,
                                     imageid='ID', subset=None, label=('spatial_count_knn_'+str(n_neighbors)))
+
+
 
     for n_neighbors in n_neighborsVec:
         kmeans = MiniBatchKMeans(n_clusters=10, random_state=0).fit(adata_.uns[('spatial_count_knn_'+str(n_neighbors))])
@@ -36,13 +40,13 @@ for tissue in ["All"]: ## ,"IM","CT","TAT"
     savePath = "/mnt/data/lyx/IMC/analysis/spatial/"
     if not os.path.exists(savePath):
         os.mkdir(savePath)
-    adata_.obs.to_csv(savePath+"cellular_neighbor_"+tissue+".csv")
+    adata_.obs.to_csv(savePath+"cellular_exp_neighbor_"+tissue+".csv")
 
     ## Permutation test
-    #IDs = [x for x in Counter(adata_.obs["ID"]).keys()]
+    IDs = [x for x in Counter(adata_.obs["ID"]).keys()]
 
-    #multiprocess = True
-    #if multiprocess:
-    #    multi_threads = 24
-    #    with Pool(multi_threads) as p:
-    #        p.starmap(PermutationTestMain, [(adata_, ID, 22,os.path.join(("/mnt/data/lyx/IMC/analysis/spatial/permutation_"+tissue),ID)) for ID in IDs])
+    multiprocess = True
+    if multiprocess:
+       multi_threads = 24
+       with Pool(multi_threads) as p:
+           p.starmap(PermutationTestMain, [(adata_, ID, 22,os.path.join(("/mnt/data/lyx/IMC/analysis/spatial/permutation_"+tissue),ID)) for ID in IDs])
