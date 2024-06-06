@@ -1,9 +1,6 @@
 
 # Spatial Proteomic Decipher Treatment Response in Colorectal Cancer Liver Metastases
 
-## Abstract
-Adjuvant therapy (AT) is a prevalent post-operative approach for colorectal cancer liver metastasis (CRLM), yet a significant number of patients could still experience early relapse after AT. In this study, we utilized imaging mass cytometry to construct a spatial proteomic landscape of the tumor microenvironment (TME) of 35 colorectal cancer liver metastasis (CRLM) patients, distinguished by their early relapse status post-adjuvant therapy (AT). Our single-cell analysis identified a significant correlation between early relapse and the enrichment of a distinct subset of CD279+ regulatory T cells at the invasive margin of the tumor. Additionally, spatial proteomic analysis has enabled us to identify two distinct bile duct microenvironments (BDMEs) within the peritumoral region of CRLM responding differently to AT. Leveraging on this finding, we developed a biomarker, termed ‘BDME score’, based on computational analysis on Hematoxylin and Eosin (H&E) stained pathological images. Our findings indicate that this score is positively associated with reduced recurrence-free time post-AT. Furthermore, patients with high BDME scores could potentially derive substantial benefit from a combined treatment strategy of chemotherapy and targeted therapy, indicating the potential of introducing more effective post-surgical treatments for CRLM patients based on improved patient stratification strategies.
-
 ## Repository Overview
 This repository contains the data analysis pipeline and scripts used in our study titled "Spatial Proteomic Decipher Treatment Response in Colorectal Cancer Liver Metastases." The analysis includes the construction of the spatial proteomic landscape of the tumor microenvironment, single-cell analysis, and the development of the BDME score.
 
@@ -11,8 +8,6 @@ This repository contains the data analysis pipeline and scripts used in our stud
 1. [Installation](#installation)
 2. [Data Preparation](#data-preparation)
 3. [Analysis Pipeline](#analysis-pipeline)
-4. [Results](#results)
-5. [References](#references)
 
 ## Installation
 To replicate our analysis, ensure you have the following dependencies installed:
@@ -24,8 +19,8 @@ install.packages(c("SingleCellExperiment", "dplyr", "stringr", "reshape2", "para
                    "cowplot", "RColorBrewer", "ggsci", "randomForest"))
 
 # Install additional R packages if needed
-# source("/home/lyx/project/IMC/clustering_functions.r")
-# source("/home/lyx/project/IMC/FlowSOM_metaClustering.r")
+# source("./clustering_functions.r")
+# source("./FlowSOM_metaClustering.r")
 ```
 
 ```python
@@ -53,22 +48,19 @@ pip install scanpy pandas numpy scimap matplotlib scikit-learn joblib
 - Perform minor clustering for specific cell types (e.g., Myeloid cells, Tumor cells).
 - Save minor clustering results and generate corresponding plots.
 
-### Random Forest Classifier
-- Train a Random Forest classifier to predict patient relapse based on proteomic profiles.
-- Evaluate the model using confusion matrix and save the trained model.
+### Downstrem analysis
 
-### T-SNE Visualization
-- Perform T-SNE dimensionality reduction on the expression data.
-- Generate and save T-SNE plots for visualizing different subtypes.
+In this study, we conducted comprehensive downstream analysis to unravel the complexities of the tumor microenvironment (TME) in colorectal cancer liver metastasis (CRLM) patients undergoing adjuvant therapy (AT). Our analysis focused on identifying cellular and spatial features associated with early recurrence post-AT and developing predictive models to guide precision treatment strategies. Below are the key components and findings of our downstream analysis:
 
-## Results
-- The analysis identifies a correlation between early relapse and CD279+ regulatory T cells.
-- Distinct bile duct microenvironments (BDMEs) are identified, leading to the development of the BDME score.
-- High BDME scores are associated with reduced recurrence-free time post-AT.
-- The BDME score suggests potential benefits from combined chemotherapy and targeted therapy for patients with high scores.
+- Single-Cell Spatial Proteomic Landscape: Using multiplex single-cell image analysis, we created the first systematic single-cell landscape of the CRLM TME. This high-resolution analysis enabled us to identify cellular and spatial features contributing to early recurrence from AT in clinical biopsy samples.
 
-## References
-For further details, refer to the original study and supplementary materials provided in this repository. Relevant scripts and data can be found in the respective directories.
+- Early Recurrence and Immune Suppression: Our single-cell analysis identified a significant correlation between early relapse and a distinct subset of CD279+ regulatory T cells (Tregs) located primarily at the invasive margin of the tumor. These Tregs interact strongly with CD163+ macrophages and CD274+ dendritic cells, suggesting their critical role in maintaining an immune-suppressive microenvironment.
+
+- Identification of Bile Duct Microenvironments (BDMEs): We discovered two distinct BDMEs in the peritumoral region of CRLM patients. The inflammatory BDME, characterized by increased size and upregulated expression of CAIX in bile duct cells, is indicative of hypoxic conditions and reduced AT efficacy. The ratio of the sizes of these BDME types was found to be associated with poor recurrence-free survival (RFS) in CRLM patients undergoing AT.
+
+- BDME Score Development: Building on our spatial proteomic analysis, we developed a BDME score through computational analysis of whole slide images (WSI). This deep learning model serves as an alternative to imaging mass cytometry (IMC) for predicting outcomes in CRLM patients. The BDME score accurately stratifies CRLM patients likely to experience early relapse and distinguishes those who would benefit more from targeted therapy following chemotherapy.
+
+Our downstream analysis provides a detailed understanding of the TME dynamics in CRLM patients, identifies individuals resistant to AT, and proposes more precise therapeutic strategies to improve patient outcomes.
 
 ## Contact
-For any questions or contributions, please contact the study authors at [contact@example.com].
+For any questions or contributions, please contact the study authors at **Issues**
